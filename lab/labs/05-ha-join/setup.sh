@@ -19,7 +19,7 @@ openssl req -new -key "$tmp/key.pem" -out "$tmp/req.pem" \
   -subj "/O=system:nodes/CN=system:node:worker1" \
   -addext "subjectAltName=DNS:worker1,DNS:k8s-api.cka.lab,IP:10.10.10.21,IP:10.10.10.10" 2>/dev/null
 
-name=csr-$(tr -dc 'a-z0-9' </dev/urandom | head -c 5)
+name=csr-$(openssl rand -hex 3 | cut -c1-5)
 kc apply -f - >/dev/null <<EOF
 apiVersion: certificates.k8s.io/v1
 kind: CertificateSigningRequest

@@ -1,0 +1,5 @@
+TITLE="RBAC: CSR-issued users, groups, aggregation, scoped ServiceAccounts"
+DOMAIN="Arch"
+CURRICULUM="Manage role based access control (RBAC)"
+NEEDS="05"
+TIME=60

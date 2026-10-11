@@ -1,0 +1,5 @@
+TITLE="CRI, CNI and CSI from the node's point of view"
+DOMAIN="Arch"
+CURRICULUM="Understand extension interfaces (CNI, CSI, CRI, etc.); Troubleshoot clusters and nodes"
+NEEDS="05"
+TIME=50

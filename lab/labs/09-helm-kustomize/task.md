@@ -1,0 +1,66 @@
+# Lab 09: Helm and Kustomize
+
+**Domain:** Cluster Architecture, Installation & Configuration (25%) · Troubleshooting (30%)
+**Curriculum:** Use Helm and Kustomize to install cluster components ·
+Monitor cluster and application resource usage
+**Suggested time:** 75 minutes · **Start with:** `lab start 09`
+
+## Part A: metrics-server, the secure way
+
+`kubectl top` and every HPA (lab 14) need **metrics-server**. Most tutorials
+install it with `--kubelet-insecure-tls`. You won't: your kubelets have serving
+certificates signed by the cluster CA (labs 03/05/07), so metrics-server can
+verify them.
+
+1. Install the **metrics-server** Helm chart **version 3.14.0** from the
+   kubernetes-sigs chart repository as release **`metrics-server`** in
+   **`kube-system`**, from a values file **`~/helm/metrics-server.yaml`**:
+   - **2 replicas**, never both on the same node
+   - a PodDisruptionBudget (`minAvailable: 1`) from the chart
+   - **no** `--kubelet-insecure-tls`, and no other TLS-weakening argument
+2. `kubectl top nodes` must show all five nodes, and `kubectl top pods -A`
+   must work.
+
+## Part B: a production overlay with Kustomize
+
+`lab start 09` wrote a base to `~/kustomize/base` (a `shop` Deployment and
+Service). Create the overlay **`~/kustomize/overlays/prod`** and apply it with
+`kubectl apply -k`. The rendered result must be:
+
+| Requirement | Detail |
+|---|---|
+| Namespace | everything in **`prod`**, and the overlay creates the namespace itself |
+| Names | prefixed **`prod-`** |
+| Label `env: prod` | on every resource **and** on the Pod template, but **not added to any selector** |
+| Replicas | **3** |
+| Image | `nginx` pinned to tag **`1.27.3-alpine`** (change the tag, not the image name) |
+| Config | a generated ConfigMap **`shop-config`** with `MODE=production`, **with** its content-hash suffix, injected into the container with `envFrom` |
+| Resources | container requests `cpu: 100m`, `memory: 64Mi`, added by a **patch** (the base is not edited) |
+
+Don't modify anything in `~/kustomize/base`.
+
+## Part C: Helm release lifecycle
+
+1. Add the **podinfo** chart repository (`https://stefanprodan.github.io/podinfo`)
+   and install chart **`podinfo` version 6.14.1** as release **`web`** in a
+   new namespace **`apps`**, with **2 replicas**.
+2. Upgrade the release (same chart version) to **3 replicas** and the UI
+   message **`hello cka`**.
+3. Roll the release back to **revision 1**.
+4. Write the release's current revision number (just the number) to
+   `~/answers/09-helm-revision.txt`.
+
+## Grading
+
+```
+lab check 09
+```
+
+## Notes
+
+- `helm show values` is the documentation for a chart's settings.
+- Kustomize's `commonLabels` is deprecated precisely *because* it rewrites
+  selectors. Look at the `labels` field and its options.
+- Selectors on a Deployment are immutable. If you apply a version that changes
+  them, the apply fails, and you'll be deleting and recreating to recover.
+- `helm history` shows every revision. A rollback creates a new one.

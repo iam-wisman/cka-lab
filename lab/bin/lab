@@ -16,7 +16,7 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
 
   lab list                      labs with status and last score
   lab show <id>                 print a lab's tasks
-  lab start <id>                prepare the cluster for a lab (runs its setup)
+  lab start <id> [phase]        prepare the cluster for a lab (runs its setup; some labs have phases)
   lab check <id>                grade a lab
   lab solution <id>             show the worked solution (after you've tried!)
 
@@ -69,12 +69,12 @@ cmd_show() {
 }
 
 cmd_start() {
-  local d id; d=$(lab_dir "$1"); id=$(basename "$d")
+  local d id; d=$(lab_dir "$1"); id=$(basename "$d"); shift
   local needs; needs=$(meta "$d" NEEDS)
   [[ -n $needs ]] && info "This lab assumes these are done: $needs"
   if [[ -x $d/setup.sh ]]; then
     info "Preparing $id ..."
-    GRADE_ID=$id bash "$d/setup.sh" || die "setup failed; fix the cluster (or lab reset) and retry"
+    GRADE_ID=$id bash "$d/setup.sh" "$@" || die "setup failed; fix the cluster (or lab reset) and retry"
   fi
   mkdir -p "$LAB_STATE/started"; date -u +%FT%TZ >"$LAB_STATE/started/$id"
   info "Ready. Read the tasks with: lab show $id"
@@ -190,10 +190,12 @@ cmd_snapshot() {
   [[ $snap =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "snapshot names: letters, digits, - and _, starting with a letter"
   [[ $snap == base ]] && die "'base' is reserved for the bare-Ubuntu snapshot"
   info "Stopping nodes for a consistent snapshot (etcd on 3 members must be captured together)"
+  # Shut down in parallel: each node can take ~90s while systemd stops containerd.
+  local upids=()
   for vm in $(lab_vmids node); do
-    vmid=${vm%%:*}
-    upid=$(pve POST "/$vmid/status/shutdown" -d timeout=120 | jq -r .data); wait_task "$upid"
+    upids+=("$(pve POST "/${vm%%:*}/status/shutdown" -d timeout=180 -d forceStop=1 | jq -r .data)")
   done
+  for upid in "${upids[@]}"; do wait_task "$upid"; done
   for vm in $(lab_vmids); do
     vmid=${vm%%:*}; name=${vm#*:}
     pve DELETE "/$vmid/snapshot/$snap" >/dev/null 2>&1 && sleep 3
@@ -226,7 +228,7 @@ cmd_reset() {
 case ${1:-} in
   list|ls) cmd_list ;;
   show) cmd_show "${2:?lab id}" ;;
-  start) cmd_start "${2:?lab id}" ;;
+  start) shift; cmd_start "${1:?lab id}" "${@:2}" ;;
   check|grade) cmd_check "${2:?lab id}" ;;
   solution) cmd_solution "${2:?lab id}" ;;
   exam) shift; cmd_exam "$@" ;;

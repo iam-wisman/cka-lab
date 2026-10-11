@@ -1,0 +1,5 @@
+TITLE="Upgrade the HA cluster from v1.34 to v1.35 without downtime"
+DOMAIN="Arch"
+CURRICULUM="Manage the lifecycle of Kubernetes clusters; Create and manage Kubernetes clusters using kubeadm"
+NEEDS="05"
+TIME=90

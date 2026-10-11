@@ -1,0 +1,5 @@
+TITLE="Helm and Kustomize: metrics-server, a prod overlay, upgrade and rollback"
+DOMAIN="Arch"
+CURRICULUM="Use Helm and Kustomize to install cluster components; Monitor cluster and application resource usage"
+NEEDS="05"
+TIME=75

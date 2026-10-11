@@ -1,0 +1,5 @@
+TITLE="CRDs and operators: cert-manager PKI and a CRD of your own"
+DOMAIN="Arch"
+CURRICULUM="Understand CRDs, install and configure operators; Use Helm and Kustomize to install cluster components"
+NEEDS="05"
+TIME=75
