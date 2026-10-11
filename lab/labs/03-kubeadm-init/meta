@@ -1,0 +1,5 @@
+TITLE="Bootstrap the first control plane with a kubeadm config file"
+DOMAIN="Arch"
+CURRICULUM="Create and manage Kubernetes clusters using kubeadm; Manage the lifecycle of Kubernetes clusters"
+NEEDS="01 02"
+TIME=60

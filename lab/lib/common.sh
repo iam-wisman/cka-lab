@@ -84,3 +84,17 @@ wait_for() {
     sleep 3
   done
 }
+
+# helm_release <namespace> <release>   latest deployed Helm release as JSON
+# ({name, version, chart:{metadata:{name,version}}, config:<user values>, info:{status}}),
+# decoded from Helm's own storage Secret, so grading never depends on the
+# student's helm binary.
+helm_release() {
+  kcq -n "$1" get secret -l "owner=helm,name=$2,status=deployed" -o json |
+    python3 -c 'import sys, json, base64, gzip
+items = json.load(sys.stdin).get("items", [])
+if not items: sys.exit(1)
+s = max(items, key=lambda i: int(i["metadata"]["labels"].get("version", 0)))
+raw = base64.b64decode(base64.b64decode(s["data"]["release"]))
+print(gzip.decompress(raw).decode() if raw[:2] == b"\x1f\x8b" else raw.decode())'
+}

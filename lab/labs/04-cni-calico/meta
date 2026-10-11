@@ -1,0 +1,5 @@
+TITLE="Install Calico with Helm and the Tigera operator"
+DOMAIN="Arch"
+CURRICULUM="Use Helm and Kustomize to install cluster components; Understand extension interfaces (CNI); Understand connectivity between Pods"
+NEEDS="03"
+TIME=45

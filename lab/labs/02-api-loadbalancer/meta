@@ -1,0 +1,5 @@
+TITLE="Load-balance the API server for an HA control plane"
+DOMAIN="Arch"
+CURRICULUM="Implement and configure a highly-available control plane"
+NEEDS="01"
+TIME=40

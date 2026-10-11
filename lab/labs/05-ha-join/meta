@@ -1,0 +1,5 @@
+TITLE="Join two more control planes and two workers"
+DOMAIN="Arch"
+CURRICULUM="Implement and configure a highly-available control plane; Create and manage Kubernetes clusters using kubeadm"
+NEEDS="04"
+TIME=60
