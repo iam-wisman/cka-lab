@@ -1,0 +1,5 @@
+TITLE="Probes, native sidecars and disruption budgets"
+DOMAIN="Workloads"
+CURRICULUM="Understand the primitives used to create robust, self-healing, application deployments"
+NEEDS="05"
+TIME=50

@@ -32,7 +32,9 @@ door first, the way kubeadm's HA guide does.
    connections while it isn't ready. Health-check each server with an HTTPS
    `GET /readyz` that expects status **200**, without verifying the certificate.
    Check every 3 seconds; mark a server down after 3 failures and up after 2
-   successes.
+   successes. When a server is marked down, **close its existing
+   connections**: kubelets and controllers hold one long-lived connection, and
+   by default HAProxy leaves it pinned to the dead server.
 
 5. **Long-lived connections.** `kubectl get -w`, `kubectl logs -f` and every
    controller's watch must not be cut off after HAProxy's default 50 seconds of

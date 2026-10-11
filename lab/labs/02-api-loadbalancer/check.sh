@@ -40,6 +40,8 @@ check "health checks over TLS without verification (check-ssl, verify none)" bas
   "sed 's/#.*//' $CFG | grep -E '^\s*(server|default-server)\b' | grep -w check-ssl | grep -Eq 'verify\s+none'"
 check "inter 3s fall 3 rise 2" bash -c "sed 's/#.*//' $CFG | grep -E '^\s*(server|default-server)\b' | grep -Eq 'inter\s+3(s|000)?\b' && sed 's/#.*//' $CFG | grep -E '^\s*(server|default-server)\b' | grep -Eq 'fall\s+3\b' && sed 's/#.*//' $CFG | grep -E '^\s*(server|default-server)\b' | grep -Eq 'rise\s+2\b'"
 
+check "existing sessions closed when a server is marked down" bash -c "sed 's/#.*//' $CFG | grep -E '^\s*(server|default-server)\b' | grep -Eq 'on-marked-down\s+shutdown-sessions'"
+
 section "timeouts"
 check "timeout client >= 1h" test "$(timeout_secs client)" -ge 3600
 check "timeout server >= 1h" test "$(timeout_secs server)" -ge 3600

@@ -1,0 +1,5 @@
+TITLE="ConfigMaps and Secrets: env, files, subPath, modes, projected volumes"
+DOMAIN="Workloads"
+CURRICULUM="Use ConfigMaps and Secrets to configure applications"
+NEEDS="05"
+TIME=50

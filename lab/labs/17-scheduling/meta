@@ -1,0 +1,5 @@
+TITLE="Affinity, anti-affinity, topology spread, taints and manual scheduling"
+DOMAIN="Workloads"
+CURRICULUM="Configure Pod admission and scheduling (limits, node affinity, etc.)"
+NEEDS="05"
+TIME=60

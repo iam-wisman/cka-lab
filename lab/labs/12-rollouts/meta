@@ -1,0 +1,5 @@
+TITLE="Rolling updates, failed releases, rollback and paused rollouts"
+DOMAIN="Workloads"
+CURRICULUM="Understand application deployments and how to perform rolling update and rollbacks"
+NEEDS="05"
+TIME=45

@@ -1,0 +1,5 @@
+TITLE="HPA v2 with behavior, and in-place pod resize"
+DOMAIN="Workloads"
+CURRICULUM="Configure workload autoscaling"
+NEEDS="09"
+TIME=50

@@ -1,0 +1,5 @@
+TITLE="DaemonSets, StatefulSets, indexed Jobs and CronJobs"
+DOMAIN="Workloads"
+CURRICULUM="Understand the primitives used to create robust, self-healing, application deployments; Understand application deployments"
+NEEDS="05"
+TIME=50
