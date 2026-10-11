@@ -1,0 +1,39 @@
+#cloud-config
+# Lab node (cp1-3, worker1-2, nfs): a bare Ubuntu 24.04 server. Nothing for
+# Kubernetes is prepared -- no container runtime, kernel modules, sysctls or
+# packages -- and a swap file is enabled, as on a typical fresh install. Lab 01
+# has you prepare all of it.
+
+hostname: @@HOSTNAME@@
+fqdn: @@HOSTNAME@@.@@LAB_DOMAIN@@
+manage_etc_hosts: true
+timezone: UTC
+
+users:
+  - name: student
+    gecos: CKA student
+    groups: [sudo, adm]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    passwd: "@@STUDENT_PASSWORD_HASH@@"
+    ssh_authorized_keys:
+      - "@@USER_PUBKEY@@"
+      - "@@LAB_PUBKEY@@"
+
+ssh_pwauth: false
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+  - bash-completion
+  - vim
+  - jq
+  - curl
+
+swap:
+  filename: /swap.img
+  size: 2147483648
+
+runcmd:
+  - [systemctl, enable, --now, qemu-guest-agent]

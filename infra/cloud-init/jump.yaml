@@ -1,0 +1,127 @@
+#cloud-config
+# Jump host: the only VM on your LAN. It is the lab network's NAT gateway and
+# DNS server and the place you work from, like the exam's base node. Kubernetes
+# tooling (kubectl, helm, haproxy, ...) is deliberately NOT installed: the labs
+# have you install it.
+#
+# Placeholders (double-at-sign NAMES) are filled in by infra/deploy.sh;
+# no secrets live in the repo.
+
+hostname: jump
+fqdn: jump.@@LAB_DOMAIN@@
+manage_etc_hosts: false
+timezone: UTC
+
+users:
+  - name: student
+    gecos: CKA student
+    groups: [sudo, adm]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    passwd: "@@STUDENT_PASSWORD_HASH@@"
+    ssh_authorized_keys:
+      - "@@USER_PUBKEY@@"
+      - "@@LAB_PUBKEY@@"
+
+ssh_pwauth: false
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+  - dnsmasq
+  - nftables
+  - bash-completion
+  - vim
+  - tmux
+  - jq
+  - curl
+  - git
+  - tree
+
+write_files:
+  - path: /etc/hosts
+    content: |
+      127.0.0.1   localhost
+      10.10.10.10 jump.@@LAB_DOMAIN@@ jump @@API_ENDPOINT@@
+      10.10.10.11 cp1.@@LAB_DOMAIN@@ cp1
+      10.10.10.12 cp2.@@LAB_DOMAIN@@ cp2
+      10.10.10.13 cp3.@@LAB_DOMAIN@@ cp3
+      10.10.10.21 worker1.@@LAB_DOMAIN@@ worker1
+      10.10.10.22 worker2.@@LAB_DOMAIN@@ worker2
+      10.10.10.30 nfs.@@LAB_DOMAIN@@ nfs
+      ::1         localhost ip6-localhost ip6-loopback
+
+  # DNS for the lab network: names from /etc/hosts, everything else upstream.
+  - path: /etc/dnsmasq.d/cka-lab.conf
+    content: |
+      interface=eth1
+      bind-interfaces
+      listen-address=10.10.10.10
+      domain=@@LAB_DOMAIN@@
+      local=/@@LAB_DOMAIN@@/
+      expand-hosts
+      domain-needed
+      bogus-priv
+      resolv-file=/run/systemd/resolve/resolv.conf
+      # A second zone the CoreDNS lab forwards to (stub domain exercise).
+      address=/legacy.corp.internal/10.10.10.10
+      txt-record=whoami.corp.internal,"answered by jump dnsmasq"
+      host-record=db.corp.internal,10.10.10.30
+
+  # NAT the lab network out through the LAN interface.
+  - path: /etc/nftables.conf
+    permissions: "0755"
+    content: |
+      #!/usr/sbin/nft -f
+      flush ruleset
+      table inet filter {
+        chain input   { type filter hook input priority 0; policy accept; }
+        chain forward {
+          type filter hook forward priority 0; policy drop;
+          ct state established,related accept
+          iifname "eth1" oifname "eth0" accept
+        }
+        chain output  { type filter hook output priority 0; policy accept; }
+      }
+      table ip nat {
+        chain postrouting {
+          type nat hook postrouting priority 100;
+          ip saddr @@LAB_NET@@ oifname "eth0" masquerade
+        }
+      }
+
+  - path: /etc/sysctl.d/90-cka-lab-router.conf
+    content: |
+      net.ipv4.ip_forward = 1
+
+  # Internal key: student@jump -> every lab node, like `ssh <node>` in the exam.
+  - path: /home/student/.ssh/id_ed25519
+    owner: student:student
+    permissions: "0600"
+    defer: true
+    content: |
+@@LAB_PRIVKEY_INDENTED@@
+  - path: /home/student/.ssh/config
+    owner: student:student
+    permissions: "0600"
+    defer: true
+    content: |
+      Host cp1 cp2 cp3 worker1 worker2 nfs *.@@LAB_DOMAIN@@ 10.10.10.*
+        User student
+        IdentityFile ~/.ssh/id_ed25519
+        StrictHostKeyChecking accept-new
+        UserKnownHostsFile ~/.ssh/known_hosts
+
+  - path: /etc/motd
+    content: |
+
+        CKA lab jump host (jump.@@LAB_DOMAIN@@)
+        Nodes: cp1 cp2 cp3 worker1 worker2 nfs   ->  ssh <node>
+        Labs:  lab list | lab start <id> | lab check <id> | lab exam <n>
+
+runcmd:
+  - [sysctl, --system]
+  - [systemctl, enable, --now, nftables]
+  - [systemctl, restart, dnsmasq]
+  - [systemctl, enable, --now, qemu-guest-agent]

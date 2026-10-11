@@ -1,0 +1,5 @@
+# Never commit lab secrets or rendered cloud-init (they contain keys/password hashes)
+*.pem
+*_ed25519
+*.kubeconfig
+rendered/

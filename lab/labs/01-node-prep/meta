@@ -1,0 +1,5 @@
+TITLE="Prepare five bare Ubuntu servers for kubeadm"
+DOMAIN="Arch"
+CURRICULUM="Prepare underlying infrastructure for installing a Kubernetes cluster; Understand extension interfaces (CRI)"
+NEEDS=""
+TIME=75

@@ -1,0 +1,238 @@
+#!/bin/bash
+# lab: run, grade and reset the CKA practice labs from the jump host.
+
+set -uo pipefail
+export LAB_HOME=${LAB_HOME:-/opt/cka-lab}
+source "$LAB_HOME/lib/common.sh"
+
+PVE_ENV=/etc/cka-lab/pve.env           # PVE_URL, PVE_NODE, PVE_TOKEN (restricted API token)
+LAB_ENV=/etc/cka-lab/lab.env           # VM IDs (copied from infra/lab.env)
+EXAM_MINUTES=120
+EXAM_PASS=66
+
+usage() {
+  cat <<EOF
+${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
+
+  lab list                      labs with status and last score
+  lab show <id>                 print a lab's tasks
+  lab start <id>                prepare the cluster for a lab (runs its setup)
+  lab check <id>                grade a lab
+  lab solution <id>             show the worked solution (after you've tried!)
+
+  lab exam <n> start            begin mock exam <n>: sets up all tasks, 120 min timer
+  lab exam <n> show [task]      print the exam paper, or one task
+  lab exam <n> check            grade the exam (weighted, pass mark ${EXAM_PASS}%)
+  lab exam <n> status           time remaining
+
+  lab snapshots                 list cluster snapshots
+  lab snapshot <name>           snapshot every lab VM (briefly stops the nodes)
+  lab reset <name>              roll every lab VM back to a snapshot ("base" = bare Ubuntu)
+
+<id> is the number or folder name, e.g. 03 or 03-kubeadm-init.
+EOF
+}
+
+# --- lab lookup ---------------------------------------------------------------
+
+lab_dir() {
+  local id=$1 d
+  for d in "$LAB_HOME"/labs/"$id" "$LAB_HOME"/labs/"$(printf '%02d' "$((10#$id))" 2>/dev/null)"-*; do
+    [[ -d $d ]] && { echo "$d"; return; }
+  done 2>/dev/null
+  d=$(compgen -G "$LAB_HOME/labs/${id}-*" | head -1)
+  [[ -n $d ]] && { echo "$d"; return; }
+  die "no lab '$id' (try: lab list)"
+}
+
+meta() { (source "$1/meta"; eval "echo \"\${$2:-}\""); }
+
+cmd_list() {
+  local d id title domain res score
+  printf "${c_bold}%-26s %-8s %-52s %s${c_off}\n" LAB DOMAIN TITLE "LAST CHECK"
+  for d in "$LAB_HOME"/labs/*/; do
+    d=${d%/}; id=$(basename "$d")
+    title=$(meta "$d" TITLE); domain=$(meta "$d" DOMAIN)
+    res=$LAB_STATE/results/$id.json
+    if [[ -f $res ]]; then
+      score=$(jq -r '"\(.pass)/\(.total)"' "$res")
+      [[ $(jq -r '.pass == .total' "$res") == true ]] && score="${c_green}${score} done${c_off}" || score="${c_yellow}${score}${c_off}"
+    elif [[ -f $LAB_STATE/started/$id ]]; then score="${c_dim}started${c_off}"
+    else score="${c_dim}-${c_off}"; fi
+    printf "%-26s %-8s %-52s %s\n" "$id" "$domain" "${title:0:52}" "$score"
+  done
+}
+
+cmd_show() {
+  local d; d=$(lab_dir "$1")
+  if command -v glow >/dev/null; then glow -p "$d/task.md"; else less -FRX "$d/task.md"; fi
+}
+
+cmd_start() {
+  local d id; d=$(lab_dir "$1"); id=$(basename "$d")
+  local needs; needs=$(meta "$d" NEEDS)
+  [[ -n $needs ]] && info "This lab assumes these are done: $needs"
+  if [[ -x $d/setup.sh ]]; then
+    info "Preparing $id ..."
+    GRADE_ID=$id bash "$d/setup.sh" || die "setup failed; fix the cluster (or lab reset) and retry"
+  fi
+  mkdir -p "$LAB_STATE/started"; date -u +%FT%TZ >"$LAB_STATE/started/$id"
+  info "Ready. Read the tasks with: lab show $id"
+}
+
+cmd_check() {
+  local d id; d=$(lab_dir "$1"); id=$(basename "$d")
+  echo "${c_bold}Grading $id: $(meta "$d" TITLE)${c_off}"
+  GRADE_ID=$id bash "$d/check.sh"
+}
+
+cmd_solution() {
+  local d id f; d=$(lab_dir "$1"); id=$(basename "$d")
+  f=$LAB_SOLUTIONS/labs/$id/solution.md
+  [[ -f $f ]] || die "no solution installed for $id (solutions live in the private cka-lab-solutions repo)"
+  read -rp "Show the solution for $id? Struggling first is where the learning happens. [y/N] " ok
+  [[ $ok == y ]] || exit 0
+  if command -v glow >/dev/null; then glow -p "$f"; else less -FRX "$f"; fi
+}
+
+# --- mock exams ----------------------------------------------------------------
+
+exam_dir() { [[ -d $LAB_HOME/exams/$1 ]] || die "no mock exam $1"; echo "$LAB_HOME/exams/$1"; }
+
+cmd_exam() {
+  local n=${1:-} action=${2:-show} d st; [[ -n $n ]] || { usage; exit 2; }
+  d=$(exam_dir "$n"); st=$LAB_STATE/exam-$n
+  case $action in
+    start)
+      [[ -f $st/deadline ]] && (( $(date +%s) < $(<"$st/deadline") )) && die "exam $n is already running (lab exam $n status)"
+      mkdir -p "$st"; rm -f "$st"/*
+      local t
+      for t in "$d"/tasks/*/; do
+        t=${t%/}
+        if [[ -x $t/setup.sh ]]; then
+          printf '%s preparing %s\n' "${c_blue}::${c_off}" "$(basename "$t")"
+          GRADE_ID=exam$n-$(basename "$t") bash "$t/setup.sh" >"$st/setup-$(basename "$t").log" 2>&1 \
+            || die "setup of $(basename "$t") failed, see $st/setup-$(basename "$t").log"
+        fi
+      done
+      echo $(( $(date +%s) + EXAM_MINUTES * 60 )) >"$st/deadline"
+      info "Mock exam $n started: $EXAM_MINUTES minutes. Read it with: lab exam $n show"
+      ;;
+    show)
+      if [[ -n ${3:-} ]]; then
+        local t; t=$(compgen -G "$d/tasks/$(printf '%02d' "$((10#$3))")-*" | head -1)
+        [[ -n $t ]] || die "no task $3"
+        less -FRX "$t/task.md"
+      else
+        { cat "$d/README.md"; for t in "$d"/tasks/*/; do echo; echo "---"; echo; cat "$t/task.md"; done; } | less -FRX
+      fi
+      ;;
+    status)
+      [[ -f $st/deadline ]] || die "exam $n not started"
+      local left=$(( $(<"$st/deadline") - $(date +%s) ))
+      (( left > 0 )) && info "$((left / 60)) min $((left % 60)) s left" || info "time is up (lab exam $n check)"
+      ;;
+    check)
+      local t w frac got=0 max=0 line
+      printf "${c_bold}%-34s %6s %8s${c_off}\n" TASK WEIGHT SCORE
+      for t in "$d"/tasks/*/; do
+        t=${t%/}
+        w=$(meta "$t" WEIGHT)
+        GRADE_QUIET=1 GRADE_ID=exam$n-$(basename "$t") bash "$t/check.sh" >/dev/null 2>&1
+        line=$LAB_STATE/results/exam$n-$(basename "$t").json
+        frac=$(jq -r '.pass / .total' "$line")
+        got=$(awk -v g="$got" -v w="$w" -v f="$frac" 'BEGIN{print g + w*f}')
+        max=$((max + w))
+        printf "%-34s %5s%% %7.1f%%\n" "$(basename "$t")" "$w" "$(awk -v w="$w" -v f="$frac" 'BEGIN{print w*f}')"
+      done
+      local pct; pct=$(awk -v g="$got" -v m="$max" 'BEGIN{printf "%.0f", g*100/m}')
+      echo
+      if (( pct >= EXAM_PASS )); then echo "${c_green}${c_bold}Score ${pct}% - PASS (needs ${EXAM_PASS}%)${c_off}"
+      else echo "${c_red}${c_bold}Score ${pct}% - FAIL (needs ${EXAM_PASS}%)${c_off}"; fi
+      echo "Per-check detail: GRADE_ID=... lab check is not used for exams; run bash $d/tasks/<task>/check.sh"
+      ;;
+    *) usage; exit 2 ;;
+  esac
+}
+
+# --- Proxmox snapshots -------------------------------------------------------------
+
+pve() {
+  local method=$1 path=$2; shift 2
+  [[ -r $PVE_ENV ]] || die "snapshots need $PVE_ENV (installed by infra/install-lab.sh)"
+  source "$PVE_ENV"
+  curl -sS --fail-with-body -k -X "$method" -H "Authorization: PVEAPIToken=$PVE_TOKEN" \
+    "$PVE_URL/api2/json/nodes/$PVE_NODE/qemu$path" "$@"
+}
+
+lab_vmids() { source "$LAB_ENV"; grep -Ev '^\s*(#|$)' <<<"$LAB_VMS" | awk -v r="${1:-}" 'r=="" || $8==r {print $2":"$1}'; }
+
+wait_task() { # wait for a Proxmox task (UPID) to finish
+  local upid=$1 status
+  for _ in $(seq 1 180); do
+    status=$(pve GET "/../tasks/$upid/status" 2>/dev/null | jq -r '.data.status // empty')
+    [[ $status == stopped ]] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+cmd_snapshots() {
+  local vm vmid name
+  for vm in $(lab_vmids); do
+    vmid=${vm%%:*}; name=${vm#*:}
+    printf '%-8s %s\n' "$name" "$(pve GET "/$vmid/snapshot" | jq -r '[.data[] | select(.name != "current") | .name] | join("  ")')"
+  done
+}
+
+cmd_snapshot() {
+  local snap=${1:-} vm vmid name upid
+  [[ $snap =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "snapshot names: letters, digits, - and _, starting with a letter"
+  [[ $snap == base ]] && die "'base' is reserved for the bare-Ubuntu snapshot"
+  info "Stopping nodes for a consistent snapshot (etcd on 3 members must be captured together)"
+  for vm in $(lab_vmids node); do
+    vmid=${vm%%:*}
+    upid=$(pve POST "/$vmid/status/shutdown" -d timeout=120 | jq -r .data); wait_task "$upid"
+  done
+  for vm in $(lab_vmids); do
+    vmid=${vm%%:*}; name=${vm#*:}
+    pve DELETE "/$vmid/snapshot/$snap" >/dev/null 2>&1 && sleep 3
+    upid=$(pve POST "/$vmid/snapshot" -d snapname="$snap" -d description="lab snapshot $(date -u +%FT%TZ)" | jq -r .data)
+    wait_task "$upid" && info "$name: snapshot $snap"
+  done
+  for vm in $(lab_vmids node); do pve POST "/${vm%%:*}/status/start" >/dev/null; done
+  info "Nodes starting; the cluster is back in a minute or two"
+}
+
+cmd_reset() {
+  local snap=${1:-} vm vmid name upid
+  [[ -n $snap ]] || die "usage: lab reset <snapshot>"
+  read -rp "Roll ALL lab VMs back to '$snap'? Everything since is lost. [y/N] " ok
+  [[ $ok == y ]] || exit 0
+  for vm in $(lab_vmids node); do
+    vmid=${vm%%:*}; name=${vm#*:}
+    pve POST "/$vmid/status/stop" >/dev/null 2>&1 && sleep 2
+    upid=$(pve POST "/$vmid/snapshot/$snap/rollback" | jq -r .data) || die "$name has no snapshot $snap"
+    wait_task "$upid"; pve POST "/$vmid/status/start" >/dev/null
+    info "$name: rolled back to $snap"
+  done
+  rm -rf "$LAB_STATE/results" "$LAB_STATE/started" "$LAB_STATE"/exam-*
+  # The jump host goes last: rolling it back ends this session.
+  vm=$(lab_vmids jump); vmid=${vm%%:*}
+  info "Rolling back the jump host; you'll be disconnected. Reconnect in about a minute."
+  pve POST "/$vmid/snapshot/$snap/rollback" -d start=1 >/dev/null
+}
+
+case ${1:-} in
+  list|ls) cmd_list ;;
+  show) cmd_show "${2:?lab id}" ;;
+  start) cmd_start "${2:?lab id}" ;;
+  check|grade) cmd_check "${2:?lab id}" ;;
+  solution) cmd_solution "${2:?lab id}" ;;
+  exam) shift; cmd_exam "$@" ;;
+  snapshots) cmd_snapshots ;;
+  snapshot) cmd_snapshot "${2:-}" ;;
+  reset) cmd_reset "${2:-}" ;;
+  ""|-h|--help|help) usage ;;
+  *) usage; exit 2 ;;
+esac

@@ -1,0 +1,86 @@
+# Shared helpers for the lab CLI, setup scripts and graders. Sourced, not run.
+#
+# Everything runs as `student` on the jump host. Nodes are reached over SSH
+# with the lab key (~/.ssh/config maps cp1..nfs), and root work on them goes
+# through passwordless sudo, exactly as in the exam environment.
+
+LAB_HOME=${LAB_HOME:-/opt/cka-lab}
+LAB_STATE=${LAB_STATE:-$HOME/.cka-lab}
+LAB_SOLUTIONS=${LAB_SOLUTIONS:-/opt/cka-lab-solutions}
+CONTROL_PLANES=(cp1 cp2 cp3)
+WORKERS=(worker1 worker2)
+K8S_NODES=("${CONTROL_PLANES[@]}" "${WORKERS[@]}")
+API_ENDPOINT=k8s-api.cka.lab
+
+# Grader-owned kubectl, so a student's broken or missing kubectl on the jump
+# host never decides a grade.
+GRADER_KUBECTL=$LAB_HOME/bin/kubectl
+GRADER_KUBECONFIG=$LAB_STATE/grader.kubeconfig
+
+c_red=$'\e[31m' c_green=$'\e[32m' c_yellow=$'\e[33m' c_blue=$'\e[34m' c_dim=$'\e[2m' c_bold=$'\e[1m' c_off=$'\e[0m'
+
+die() { echo "${c_red}error:${c_off} $*" >&2; exit 1; }
+info() { echo "${c_blue}::${c_off} $*"; }
+
+# --- running things on nodes ------------------------------------------------
+
+# on <node> <command...>   run as root on a node; stdout/stderr pass through.
+on() {
+  local node=$1 cmd; shift
+  # Quote twice: once into a command line for bash -c, then that whole line
+  # again, because ssh joins its arguments into a string for the remote shell.
+  cmd=$(printf '%q ' "$@")
+  ssh -o BatchMode=yes -o ConnectTimeout=5 -o LogLevel=ERROR "$node" "sudo bash -c $(printf '%q' "$cmd")"
+}
+
+# on_script <node> <<'EOF' ... EOF   run a root script on a node from stdin.
+on_script() {
+  local node=$1
+  ssh -o BatchMode=yes -o ConnectTimeout=5 -o LogLevel=ERROR "$node" sudo bash -s
+}
+
+node_up() { ssh -o BatchMode=yes -o ConnectTimeout=3 -o LogLevel=ERROR "$1" true 2>/dev/null; }
+
+# --- kubectl as cluster-admin for graders and setup scripts -----------------
+
+# Fetch admin.conf from the first control plane that has one. The server is
+# pointed at the API endpoint when it answers, else straight at a control plane
+# whose API server answers, so a broken load balancer doesn't hide everything else.
+grader_kubeconfig() {
+  local cp server
+  mkdir -p "$LAB_STATE"
+  for cp in "${CONTROL_PLANES[@]}"; do
+    if on "$cp" test -f /etc/kubernetes/admin.conf 2>/dev/null; then
+      on "$cp" cat /etc/kubernetes/admin.conf >"$GRADER_KUBECONFIG.tmp" 2>/dev/null && break
+    fi
+  done
+  [[ -s $GRADER_KUBECONFIG.tmp ]] || { rm -f "$GRADER_KUBECONFIG.tmp"; return 1; }
+  mv "$GRADER_KUBECONFIG.tmp" "$GRADER_KUBECONFIG"
+  chmod 600 "$GRADER_KUBECONFIG"
+
+  for server in "https://$API_ENDPOINT:6443" https://10.10.10.11:6443 https://10.10.10.12:6443 https://10.10.10.13:6443; do
+    if curl -sk --max-time 3 "$server/readyz" -o /dev/null -w '%{http_code}' 2>/dev/null | grep -qE '^(200|401|403)$'; then
+      "$GRADER_KUBECTL" --kubeconfig "$GRADER_KUBECONFIG" config set-cluster \
+        "$("$GRADER_KUBECTL" --kubeconfig "$GRADER_KUBECONFIG" config view -o jsonpath='{.clusters[0].name}')" \
+        --server "$server" >/dev/null
+      return 0
+    fi
+  done
+  return 1
+}
+
+# kc ...   kubectl as cluster-admin (grader identity).
+kc() { "$GRADER_KUBECTL" --kubeconfig "$GRADER_KUBECONFIG" --request-timeout=20s "$@"; }
+
+# kcq <jsonpath-or-args...>  kubectl, stderr discarded, never fails the caller.
+kcq() { kc "$@" 2>/dev/null || true; }
+
+# Wait up to $1 seconds for "$@" (after the timeout) to succeed.
+wait_for() {
+  local timeout=$1; shift
+  local end=$((SECONDS + timeout))
+  until "$@" >/dev/null 2>&1; do
+    (( SECONDS >= end )) && return 1
+    sleep 3
+  done
+}
