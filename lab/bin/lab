@@ -28,6 +28,7 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
   lab exam <n> cleanup [--yes]  remove the exam's leftovers (lab reset before-exam<n> is cleaner)
 
   lab snapshots                 list cluster snapshots
+  lab snapshots delete <name>   delete a snapshot from every lab VM ("base" is protected)
   lab snapshot <name>           snapshot every lab VM (briefly stops the nodes)
   lab reset <name>              roll every lab VM back to a snapshot ("base" = bare Ubuntu)
 
@@ -178,6 +179,9 @@ cmd_exam() {
         printf "%-34s %5s%% %7.1f%%\n" "$(basename "$t")" "$w" "$(awk -v w="$w" -v f="$frac" 'BEGIN{print w*f}')"
       done
       local pct; pct=$(awk -v g="$got" -v m="$max" 'BEGIN{printf "%.0f", g*100/m}')
+      jq -n --argjson n "$n" --argjson score "$pct" --argjson pass_mark "$EXAM_PASS" --arg at "$(date -u +%FT%TZ)" \
+        '{exam:$n, score:$score, pass_mark:$pass_mark, passed:($score >= $pass_mark), at:$at}' \
+        | tee "$LAB_STATE/results/exam$n.json" | jq -c . >>"$LAB_STATE/exam-history.jsonl"
       echo
       if (( pct >= EXAM_PASS )); then echo "${c_green}${c_bold}Score ${pct}% - PASS (needs ${EXAM_PASS}%)${c_off}"
       else echo "${c_red}${c_bold}Score ${pct}% - FAIL (needs ${EXAM_PASS}%)${c_off}"; fi
@@ -220,6 +224,20 @@ cmd_snapshots() {
   for vm in $(lab_vmids); do
     vmid=${vm%%:*}; name=${vm#*:}
     printf '%-8s %s\n' "$name" "$(pve GET "/$vmid/snapshot" | jq -r '[.data[] | select(.name != "current") | .name] | join("  ")')"
+  done
+}
+
+cmd_snapshot_delete() {
+  local snap=${1:-} vm vmid name upid
+  [[ $snap =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "usage: lab snapshots delete <name>"
+  [[ $snap == base ]] && die "'base' is the bare-Ubuntu starting point; it can't be deleted from here"
+  for vm in $(lab_vmids); do
+    vmid=${vm%%:*}; name=${vm#*:}
+    if upid=$(pve DELETE "/$vmid/snapshot/$snap" 2>/dev/null | jq -r .data) && [[ -n $upid && $upid != null ]]; then
+      wait_task "$upid" && info "$name: deleted $snap"
+    else
+      info "$name: no snapshot $snap"
+    fi
   done
 }
 
@@ -271,7 +289,12 @@ case ${1:-} in
   solution) cmd_solution "${2:?lab id}" ;;
   cleanup|clean) cmd_cleanup "${2:?lab id}" "${3:-}" ;;
   exam) shift; cmd_exam "$@" ;;
-  snapshots) cmd_snapshots ;;
+  snapshots)
+    case ${2:-} in
+      "") cmd_snapshots ;;
+      delete|rm) cmd_snapshot_delete "${3:-}" ;;
+      *) usage; exit 2 ;;
+    esac ;;
   snapshot) cmd_snapshot "${2:-}" ;;
   reset) cmd_reset "${2:-}" ;;
   ""|-h|--help|help) usage ;;

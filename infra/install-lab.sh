@@ -1,11 +1,16 @@
 #!/bin/bash
 # Install (or update) the lab framework on the jump host.
 #
-#   PVE=root@192.168.8.200 infra/install-lab.sh [--solutions <dir>] [--no-token]
+#   PVE=root@192.168.8.200 infra/install-lab.sh [--solutions <dir>] [--no-token] [--web-password]
+#   JUMP_IP=192.168.8.160 infra/install-lab.sh --no-token     (no Proxmox login needed)
 #
 # - copies lab/ to /opt/cka-lab and links /usr/local/bin/lab
 # - installs a grader-only kubectl in /opt/cka-lab/bin (students install their own)
 # - optionally copies the private solutions repo to /opt/cka-lab-solutions
+# - installs the web console (lab/web) as lab-web.service on https://<jump>/, with a
+#   self-signed certificate. It logs in with the student password, read from
+#   $WEB_PASSWORD or ~/.local/share/cka-lab/student-password; --web-password
+#   re-sets it on an existing install.
 # - creates a Proxmox API token that can only snapshot/rollback/power the lab VMs
 #   (pool "cka-lab", role "CKALab"), stored on the jump host in /etc/cka-lab/pve.env
 #
@@ -18,12 +23,13 @@ PVE=${PVE:-root@192.168.8.200}
 read -ra SSH_OPTS <<<"${SSH_OPTS:-}"
 JUMP_KEY=${JUMP_KEY:-$HOME/.ssh/cka-lab}
 GRADER_KUBECTL_VERSION=v1.35.9
-SOLUTIONS="" ROTATE=0 TOKEN=1
+SOLUTIONS="" ROTATE=0 TOKEN=1 WEB_PW_RESET=0
 while (( $# )); do
   case $1 in
     --solutions) SOLUTIONS=$2; shift 2 ;;
     --rotate-token) ROTATE=1; shift ;;
     --no-token) TOKEN=0; shift ;;
+    --web-password) WEB_PW_RESET=1; shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -32,9 +38,9 @@ source infra/lab.env
 jump_vmid=$(awk '$8=="jump"{print $2}' <<<"$LAB_VMS")
 pve() { ssh "${SSH_OPTS[@]}" "$PVE" "$@"; }
 
-# The jump host's LAN address, from the QEMU guest agent.
-JUMP_IP=$(pve "qm guest cmd $jump_vmid network-get-interfaces" |
-  jq -r '.[] | select(.name=="eth0") | ."ip-addresses"[] | select(."ip-address-type"=="ipv4") | ."ip-address"' | head -1)
+# The jump host's LAN address, from the QEMU guest agent (or JUMP_IP=... to skip Proxmox).
+JUMP_IP=${JUMP_IP:-$(pve "qm guest cmd $jump_vmid network-get-interfaces" |
+  jq -r '.[] | select(.name=="eth0") | ."ip-addresses"[] | select(."ip-address-type"=="ipv4") | ."ip-address"' | head -1)}
 [[ -n $JUMP_IP ]] || { echo "could not find the jump host's LAN IP" >&2; exit 1; }
 JUMP=student@$JUMP_IP
 jssh() { ssh -i "$JUMP_KEY" -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR "$JUMP" "$@"; }
@@ -93,5 +99,32 @@ EOF
   printf 'PVE_URL=https://%s:8006\nPVE_NODE=%s\nPVE_TOKEN=cka-lab@pve!jump=%s\n' "${PVE#*@}" "$pve_node" "$secret" |
     jssh 'sudo install -m 600 -o student -g student /dev/stdin /etc/cka-lab/pve.env'
 fi
+
+echo "[install] web console"
+jssh 'dpkg -s python3-aiohttp >/dev/null 2>&1 || { sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get install -y -qq python3-aiohttp >/dev/null; }'
+if (( WEB_PW_RESET )) || ! jssh 'sudo test -s /etc/cka-lab/web.env'; then
+  pw=${WEB_PASSWORD:-$(cat "$HOME/.local/share/cka-lab/student-password" 2>/dev/null || true)}
+  [[ -n $pw ]] || { echo "set WEB_PASSWORD (or create ~/.local/share/cka-lab/student-password)" >&2; exit 1; }
+  # Only a salted PBKDF2 hash goes to the jump host.
+  hash=$(WEB_PW=$pw python3 - <<'PY'
+import hashlib, os, secrets
+salt, n = secrets.token_bytes(16), 600000
+digest = hashlib.pbkdf2_hmac("sha256", os.environ["WEB_PW"].encode(), salt, n)
+print(f"pbkdf2_sha256${n}${salt.hex()}${digest.hex()}")
+PY
+)
+  # Single quotes: systemd must not expand the $ separators in the hash.
+  printf "WEB_PASSWORD_HASH='%s'\nWEB_PORT=443\nWEB_CERT=/etc/cka-lab/web.crt\nWEB_KEY=/etc/cka-lab/web.key\n" "$hash" |
+    jssh 'sudo install -m 600 -o student -g student /dev/stdin /etc/cka-lab/web.env'
+fi
+# Self-signed certificate for the jump host's LAN address; regenerated when the address changes.
+jssh "sudo openssl x509 -in /etc/cka-lab/web.crt -noout -ext subjectAltName 2>/dev/null | grep -q 'IP Address:$JUMP_IP\$\|IP Address:$JUMP_IP,' || {
+  sudo openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 -subj '/CN=CKA lab console' \
+    -addext 'subjectAltName=IP:$JUMP_IP,DNS:jump.cka.lab,DNS:jump' -addext 'extendedKeyUsage=serverAuth' \
+    -keyout /etc/cka-lab/web.key -out /etc/cka-lab/web.crt 2>/dev/null &&
+  sudo chown student:student /etc/cka-lab/web.key /etc/cka-lab/web.crt && sudo chmod 600 /etc/cka-lab/web.key; }"
+jssh 'sudo install -m 644 /opt/cka-lab/web/lab-web.service /etc/systemd/system/lab-web.service &&
+  sudo systemctl daemon-reload && sudo systemctl enable -q lab-web && sudo systemctl restart lab-web'
+echo "[install] web console: https://$JUMP_IP/  (self-signed certificate; log in with the student password)"
 
 echo "[install] done: ssh -i $JUMP_KEY $JUMP   then   lab list"

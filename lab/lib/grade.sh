@@ -17,14 +17,18 @@ GRADE_PASS=0
 GRADE_TOTAL=0
 GRADE_FAILED=()
 GRADE_QUIET=${GRADE_QUIET:-0}
+GRADE_SECTION=""
+GRADE_CHECKS=()   # one JSON object per check, for the web console
 
 _say() { (( GRADE_QUIET )) || echo "$@"; }
 
-section() { _say; _say "${c_bold}$*${c_off}"; }
+section() { GRADE_SECTION=$*; _say; _say "${c_bold}$*${c_off}"; }
 
 _record() {
   local ok=$1 desc=$2 detail=${3:-}
   GRADE_TOTAL=$((GRADE_TOTAL + 1))
+  GRADE_CHECKS+=("$(jq -nc --arg s "$GRADE_SECTION" --arg d "$desc" --arg x "$detail" --argjson ok "$ok" \
+    '{section:$s, desc:$d, ok:($ok == 1), detail:$x}')")
   if (( ok )); then
     GRADE_PASS=$((GRADE_PASS + 1))
     _say "  ${c_green}PASS${c_off} $desc"
@@ -66,9 +70,11 @@ finish() {
   local pct=0 dir=$LAB_STATE/results
   (( GRADE_TOTAL )) && pct=$(( GRADE_PASS * 100 / GRADE_TOTAL ))
   mkdir -p "$dir"
-  jq -n --arg id "$GRADE_ID" --argjson pass "$GRADE_PASS" --argjson total "$GRADE_TOTAL" \
-    --arg at "$(date -u +%FT%TZ)" --args '{id:$id, pass:$pass, total:$total, at:$at, failed:$ARGS.positional}' \
-    "${GRADE_FAILED[@]}" >"$dir/$GRADE_ID.json"
+  printf '%s\n' "${GRADE_CHECKS[@]}" | jq -s --arg id "$GRADE_ID" --argjson pass "$GRADE_PASS" \
+    --argjson total "$GRADE_TOTAL" --arg at "$(date -u +%FT%TZ)" \
+    '{id:$id, pass:$pass, total:$total, at:$at, failed:[.[] | select(.ok | not) | .desc], checks:.}' \
+    >"$dir/$GRADE_ID.json"
+  jq -c '{id, pass, total, at}' "$dir/$GRADE_ID.json" >>"$LAB_STATE/history.jsonl"
   _say
   if (( GRADE_PASS == GRADE_TOTAL )); then
     _say "${c_green}${c_bold}$GRADE_ID: $GRADE_PASS/$GRADE_TOTAL checks passed (100%)${c_off}"

@@ -3,3 +3,4 @@ DOMAIN="Arch"
 CURRICULUM="Manage the lifecycle of Kubernetes clusters; Implement and configure a highly-available control plane; Troubleshoot cluster components"
 NEEDS="05"
 TIME=90
+PHASES="disaster"

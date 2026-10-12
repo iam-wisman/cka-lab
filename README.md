@@ -12,6 +12,12 @@ The labs are deliberately hard. You build the cluster yourself with kubeadm
 v1.34 to v1.35, restore a three-member etcd from a snapshot, and debug faults
 injected into nodes, control planes, workloads and networking.
 
+Work in the terminal over SSH, or in the **browser console** on the jump host:
+the task on the left, a real shell on the right, a **Check** button that grades
+on demand, and a timed exam mode. See [Web console](#web-console-labweb).
+
+<p align="center"><img src="docs/web/lab.png" alt="The lab workspace in the web console: lab 08's task on the left, a terminal on the jump host on the right" width="100%"></p>
+
 > **Every lab is verified end to end:** each grader is run against an
 > untouched cluster (it must fail) and again after a scripted reference
 > solution (it must reach 100%). That process found and fixed real bugs in
@@ -74,7 +80,8 @@ kernel tuning, so lab 01 is real work.
 ```
 lab list | show <id> | start <id> [phase] | check <id> | solution <id>
 lab exam <n> start | show | status | check
-lab snapshots | snapshot <name> | reset <name>
+lab snapshots [delete <name>] | snapshot <name> | reset <name>
+lab cleanup <id> | exam <n> cleanup
 ```
 
 - **Graders** are bash scripts on a small assertion library (`check`,
@@ -92,6 +99,59 @@ lab snapshots | snapshot <name> | reset <name>
   faked.
 - `lab snapshot` shuts the nodes down **in parallel** before snapshotting, so
   all three etcd members are captured at one consistent point.
+
+### Web console (`lab/web/`)
+
+A browser front end for the same framework, served by the jump host at
+`https://<jump-ip>/`. It runs the same `lab` commands as the CLI, so the two
+can be mixed freely.
+
+| | |
+|---|---|
+| **Overview** | progress per lab, curriculum coverage weighted by the five exam domains, "next up", mock exam history |
+| **Lab workspace** | the task (with its documentation links) beside a terminal; **Start**, **Check**, **Clean up** stream their output live; a **Results** tab lists every check, grouped, with expected-vs-found; per-lab notes saved on the jump host; solutions behind a "try first" prompt |
+| **Terminals** | real login shells (xterm.js over a WebSocket to a PTY). Sessions live on the server, so a reload or a closed tab reattaches to the same shell; several tabs; code blocks in the task have a **paste** button that types into the shell without pressing Enter |
+| **Mock exams** | briefing, optional snapshot before setup, 120-minute countdown, question navigator with weights and flags, a notepad, auto-grade when time runs out, weighted results per task, and a review mode showing which checks failed |
+| **Cluster** | power state of the 7 VMs (Proxmox API) and node status (Kubernetes), snapshots: take, delete, reset (typed confirmation; the page waits out the jump host's own rollback and reconnects) |
+
+<table><tr>
+<td><img src="docs/web/overview.png" alt="Overview page: labs passed, curriculum coverage by exam domain, the lab list"></td>
+<td><img src="docs/web/exam.png" alt="Mock exam review: question navigator coloured by result, task text and the checks that failed"></td>
+</tr><tr>
+<td><img src="docs/web/results.png" alt="Results tab: every check grouped by node, with expected-vs-found details"></td>
+<td><img src="docs/web/cluster.png" alt="Cluster page: VM power state, node status, snapshots"></td>
+</tr></table>
+
+How it's built:
+
+- **Server:** one Python file (`lab/web/server.py`) on aiohttp from Ubuntu's
+  own packages, so nothing comes from pip. It runs as `student` under systemd
+  and binds port 443 with `CAP_NET_BIND_SERVICE` instead of root.
+- **Jobs:** each button maps to a fixed `lab` command line (an allow-list, never
+  a shell string). One job runs at a time and its output streams over
+  server-sent events. The grader now also writes every check (section, result,
+  detail) to its JSON result, which the Results tab renders.
+- **Security:** the login is the student password, stored on the jump host only
+  as a salted PBKDF2 hash. The session cookie is HttpOnly, Secure and
+  SameSite=Strict. Changes need a custom header and a same-origin `Origin`,
+  WebSocket upgrades check `Origin` too, and the CSP allows only same-origin
+  scripts. Failed logins are rate limited. TLS uses a self-signed certificate
+  for the jump host's address, so the browser asks you to accept it once.
+- **Front end:** plain JavaScript with no build step. xterm.js, marked and
+  DOMPurify are vendored at pinned versions, so the console works without
+  internet access. Type is Schibsted Grotesk for text and Commit Mono for
+  everything you could type (both OFL, served locally; licenses sit next to
+  the files in `lab/web/static/`). It has light and dark
+  themes, and the terminal stays a dark screen in both.
+- **Screenshots:** made by `tools/web-screenshots.mjs`, which drives headless
+  Chrome over the DevTools protocol with no npm packages.
+
+`lab reset` to a snapshot taken before the console was installed (such as an
+old `base`) brings back a jump host without it; re-run `infra/install-lab.sh`
+afterwards. Restarting the service ends open browser shells.
+
+Keep it on your LAN. It is a root-capable shell on your lab, so for remote
+access use a VPN such as Tailscale rather than forwarding the port.
 
 ## What verification caught
 
@@ -133,6 +193,7 @@ PVE=root@<proxmox> infra/deploy.sh
 PVE=root@<proxmox> infra/install-lab.sh
 ssh -i ~/.ssh/cka-lab student@<jump-ip>
 lab list
+# or open https://<jump-ip>/ and log in with the student password
 ```
 
 ## Resetting and retrying
@@ -157,6 +218,7 @@ lab snapshot before-08     # take one BEFORE starting a risky lab
 # ... attempt the lab ...
 lab reset before-08        # roll every VM back; the jump host reboots, reconnect after ~1 min
 lab snapshots              # list them
+lab snapshots delete before-08   # free the space once you're past it
 lab reset base             # start completely over: bare nodes, framework still installed
 ```
 
@@ -172,9 +234,11 @@ infra/
   cloud-init/             jump + node user-data templates
   deploy.sh               render, upload, build
   proxmox/build.sh        runs on the Proxmox host
-  install-lab.sh          framework + scoped API token on the jump host
+  install-lab.sh          framework, web console, scoped API token on the jump host
 lab/
   bin/lab                 the CLI
+  web/server.py           the web console (aiohttp): API, jobs, terminals
+  web/static/             front end: app.js, app.css, vendored xterm.js/marked/DOMPurify, fonts
   lib/common.sh           node access, grader kubectl, helm release decoding
   lib/grade.sh            assertion helpers
   labs/NN-name/           meta · task.md · setup.sh · check.sh · cleanup.sh
@@ -187,6 +251,8 @@ tools/
   add-references.py       writes those sections
   check-links.sh          verifies every link still resolves
   gen-cleanup.py          generates cleanup.sh from each task's "Cleaning up" section
+  web-screenshots.mjs     README screenshots of the web console (headless Chrome)
+docs/web/                 those screenshots
 ```
 
 Every lab's `task.md` ends with **References** (official docs, kubernetes.io
