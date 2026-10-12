@@ -13,8 +13,8 @@ check "startupProbe allows >= 90s (failureThreshold x periodSeconds)" dep slowap
   "$S | ((.startupProbe.failureThreshold // 3) * (.startupProbe.periodSeconds // 10)) + (.startupProbe.initialDelaySeconds // 0) >= 90"
 check "readinessProbe on /ready every 5s" dep slowapp "$S | .readinessProbe.httpGet.path==\"/ready\" and .readinessProbe.periodSeconds==5"
 check_eq "3/3 ready" "3 3" kcq -n heal get deploy slowapp -o 'jsonpath={.spec.replicas} {.status.readyReplicas}'
-check "current pods have 0 restarts" bash -c \
-  "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n heal get pod -l app=slowapp -o json | jq -e '(.items|length)>0 and all(.items[]; .status.containerStatuses[0].restartCount==0)'"
+check "current pods have 0 restarts (terminating old pods ignored)" bash -c \
+  "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n heal get pod -l app=slowapp -o json | jq -e '[.items[] | select(.metadata.deletionTimestamp == null)] | (length)>0 and all(.[]; .status.containerStatuses[0].restartCount==0)'"
 
 section "2: PDB"
 check "PDB slowapp: maxUnavailable 1 selecting app=slowapp" bash -c \
