@@ -45,6 +45,15 @@ lab check 15
 - startupProbe: Kubernetes waits `failureThreshold × periodSeconds` before
   giving up. Liveness and readiness probes don't run until it succeeds.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Configure liveness, readiness and startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+- [Sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/)
+- [Specifying a disruption budget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
+- [Jobs: TTL after finished](https://kubernetes.io/docs/concepts/workloads/controllers/ttlafterfinished/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 15`**. It shows the commands below and asks before running them. Or run them by hand:

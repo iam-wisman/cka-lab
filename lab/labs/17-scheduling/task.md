@@ -44,6 +44,14 @@ lab check 17
 - Topology spread only counts nodes that the pod's node affinity and
   taints/tolerations allow (`nodeAffinityPolicy`, `nodeTaintsPolicy`).
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Assigning Pods to Nodes (affinity, nodeName)](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/)
+- [Taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+- [Pod topology spread constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 17`**. It shows the commands below and asks before running them. Or run them by hand:

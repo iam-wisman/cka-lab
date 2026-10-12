@@ -45,6 +45,13 @@ lab check 12
 - `kubectl annotate ... kubernetes.io/change-cause=... --overwrite` sets the
   change-cause that history shows. (`--record` is gone.)
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Deployments: rolling updates, rollbacks, pausing](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- [kubectl rollout](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 12`**. It shows the commands below and asks before running them. Or run them by hand:

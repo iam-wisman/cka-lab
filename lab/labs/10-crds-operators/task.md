@@ -82,6 +82,17 @@ server to reject them.
 - Write `x-kubernetes-*` and `default:` carefully: defaults only apply
   inside a structural schema.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)
+- [Extend the API with CustomResourceDefinitions](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/)
+- [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
+- [cert-manager: install with Helm](https://cert-manager.io/docs/installation/helm/)
+- [cert-manager: CA issuer](https://cert-manager.io/docs/configuration/ca/)
+- [cert-manager: SelfSigned issuer](https://cert-manager.io/docs/configuration/selfsigned/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 10`**. It shows the commands below and asks before running them. Or run them by hand:

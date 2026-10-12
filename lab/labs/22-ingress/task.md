@@ -60,6 +60,15 @@ lab check 22
 - Read `helm show values traefik/traefik --version 41.7.1` for `ingressClass`,
   `providers`, `service` and `ports`.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Ingress (path types, default backend, TLS)](https://kubernetes.io/docs/concepts/services-networking/ingress/)
+- [Ingress controllers](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/)
+- [Traefik: Kubernetes Ingress](https://doc.traefik.io/traefik/reference/routing-configuration/kubernetes/ingress/)
+- [cert-manager: securing Ingress resources](https://cert-manager.io/docs/usage/ingress/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 22`**. It shows the commands below and asks before running them. Or run them by hand:

@@ -41,6 +41,17 @@ lab check 28
   Don't leave backup copies in `/etc/kubernetes/manifests/`: the kubelet runs
   **every** file there.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Troubleshooting clusters](https://kubernetes.io/docs/tasks/debug/debug-cluster/)
+- [kube-apiserver reference](https://kubernetes.io/docs/reference/command-line-tools-reference/kube-apiserver/)
+- [kube-scheduler reference](https://kubernetes.io/docs/reference/command-line-tools-reference/kube-scheduler/)
+- [kube-controller-manager reference](https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/)
+- [Leases (leader election)](https://kubernetes.io/docs/concepts/architecture/leases/)
+- [Debugging Kubernetes nodes with crictl](https://kubernetes.io/docs/tasks/debug/debug-cluster/crictl/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 28`**. It shows the commands below and asks before running them. Or run them by hand:

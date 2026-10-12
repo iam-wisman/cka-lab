@@ -57,6 +57,13 @@ forbidden ones must time out.
   IP is translated to a pod IP.
 - `kubernetes.io/metadata.name` is a label every namespace has automatically.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Network policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+- [Declare network policy](https://kubernetes.io/docs/tasks/administer-cluster/declare-network-policy/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 21`**. It shows the commands below and asks before running them. Or run them by hand:

@@ -71,6 +71,15 @@ lab check 04
 - containerd decides which CNI config to load. `containerd config dump` shows
   the directories it uses.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Network plugins (CNI)](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/)
+- [Cluster networking](https://kubernetes.io/docs/concepts/cluster-administration/networking/)
+- [Calico 3.32: install with Helm](https://docs.tigera.io/calico/3.32/getting-started/kubernetes/helm)
+- [Installing Helm](https://helm.sh/docs/intro/install/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 04`**. It shows the commands below and asks before running them. Or run them by hand:

@@ -63,6 +63,15 @@ lab check 02
   so the load balancer isn't a single point of failure. kubeadm's "Options for
   Software Load Balancing" document covers it; read it.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Creating highly available clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/)
+- [kubeadm HA considerations: software load balancing](https://github.com/kubernetes/kubeadm/blob/main/docs/ha-considerations.md)
+- [Kubernetes API health endpoints (/readyz)](https://kubernetes.io/docs/reference/using-api/health-checks/)
+- [HAProxy documentation](https://docs.haproxy.org/)
+
 ## Cleaning up
 
 `lab cleanup 02` has nothing to remove here.

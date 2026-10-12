@@ -7,7 +7,7 @@ break things on purpose; afterwards `lab reset before-exam2` gets you back.
 
 Rules, like the real exam:
 - Work from `jump`. Each task names the node or namespace to use.
-- kubernetes.io/docs, the Helm docs and the Gateway API docs are allowed; nothing else.
+- Use only the documentation the real exam allows: mainly kubernetes.io/docs (see the Linux Foundation candidate handbook for the current list).
 - Answers that go into files go under `/home/student/exam2/`.
 - Partial credit: each task is graded check by check and weighted.
 - Move on when stuck. A 4 % task isn't worth 15 minutes.

@@ -33,6 +33,16 @@ lab check 27
   before each restart.
 - `kubeadm` is not the tool here. Think about files, services and the kernel.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Troubleshooting clusters](https://kubernetes.io/docs/tasks/debug/debug-cluster/)
+- [Nodes (status, heartbeats)](https://kubernetes.io/docs/concepts/architecture/nodes/)
+- [kubelet command-line reference](https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/)
+- [Kubelet configuration (v1beta1)](https://kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/)
+- [Swap memory management](https://kubernetes.io/docs/concepts/cluster-administration/swap-memory-management/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 27`**. It shows the commands below and asks before running them. Or run them by hand:

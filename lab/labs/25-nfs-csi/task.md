@@ -59,6 +59,16 @@ In namespace `storage`:
 lab check 25
 ```
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Storage classes](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+- [Dynamic volume provisioning](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/)
+- [Change the default StorageClass](https://kubernetes.io/docs/tasks/administer-cluster/change-default-storage-class/)
+- [Volumes: CSI](https://kubernetes.io/docs/concepts/storage/volumes/#csi)
+- [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 25`**. It shows the commands below and asks before running them. Or run them by hand:

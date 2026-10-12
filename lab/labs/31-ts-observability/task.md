@@ -38,6 +38,16 @@ Write every answer to the file named, on `jump`.
 lab check 31
 ```
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Tools for monitoring resources](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-usage-monitoring/)
+- [Logging architecture (node log files, streams)](https://kubernetes.io/docs/concepts/cluster-administration/logging/)
+- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/)
+- [kubectl top](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_top/)
+- [Debugging Kubernetes nodes with crictl](https://kubernetes.io/docs/tasks/debug/debug-cluster/crictl/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 31`**. It shows the commands below and asks before running them. Or run them by hand:

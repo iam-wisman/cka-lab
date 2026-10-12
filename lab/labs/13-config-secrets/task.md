@@ -56,6 +56,16 @@ lab check 13
 - An immutable ConfigMap can't be edited, only deleted and recreated.
 - `subPath` mounts don't receive updates when the ConfigMap changes. Know why.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [ConfigMaps](https://kubernetes.io/docs/concepts/configuration/configmap/)
+- [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+- [Configure a Pod to use a ConfigMap](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/)
+- [Projected volumes](https://kubernetes.io/docs/concepts/storage/projected-volumes/)
+- [Downward API](https://kubernetes.io/docs/concepts/workloads/pods/downward-api/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 13`**. It shows the commands below and asks before running them. Or run them by hand:

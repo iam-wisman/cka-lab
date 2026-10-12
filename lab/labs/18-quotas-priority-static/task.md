@@ -44,6 +44,15 @@
 lab check 18
 ```
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Resource quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/)
+- [Limit ranges](https://kubernetes.io/docs/concepts/policy/limit-range/)
+- [Pod priority and preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)
+- [Create static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 18`**. It shows the commands below and asks before running them. Or run them by hand:

@@ -40,6 +40,15 @@ lab check 30
 - `kubectl get endpointslices -l kubernetes.io/service-name=<svc>` is the
   fastest way to see whether a Service found any pods.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/)
+- [Debugging DNS resolution](https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/)
+- [Network policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+- [DNS for Services and Pods (dnsPolicy)](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 30`**. It shows the commands below and asks before running them. Or run them by hand:

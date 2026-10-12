@@ -40,6 +40,15 @@ lab check 19
 - How does a Service find the EndpointSlices that belong to it? (One label.)
 - `externalTrafficPolicy` has two values; one of them preserves source IPs.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Service](https://kubernetes.io/docs/concepts/services-networking/service/)
+- [EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/)
+- [Preserving the client source IP](https://kubernetes.io/docs/tasks/access-application-cluster/create-external-load-balancer/#preserving-the-client-source-ip)
+- [DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 19`**. It shows the commands below and asks before running them. Or run them by hand:

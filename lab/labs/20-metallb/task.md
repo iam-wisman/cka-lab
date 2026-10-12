@@ -43,6 +43,16 @@ lab check 20
 - Addresses 10.10.10.201–203 will be used by labs 22/23; don't pin them here.
 - MetalLB's custom resources live in `metallb.io/v1beta1`.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Service type LoadBalancer](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer)
+- [Pod Security admission (namespace labels)](https://kubernetes.io/docs/concepts/security/pod-security-admission/)
+- [MetalLB: installation](https://metallb.io/installation/)
+- [MetalLB: configuration](https://metallb.io/configuration/)
+- [MetalLB: usage (annotations)](https://metallb.io/usage/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 20`**. It shows the commands below and asks before running them. Or run them by hand:

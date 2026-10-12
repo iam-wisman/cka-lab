@@ -61,6 +61,16 @@ lab check 07
 - After the kubelet restarts with a new version it may request a new
   serving certificate (lab 03/05).
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Upgrading kubeadm clusters](https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/)
+- [Changing the Kubernetes package repository](https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/change-package-repository/)
+- [Safely drain a node](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/)
+- [Disruptions and PodDisruptionBudgets](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/)
+- [Version skew policy](https://kubernetes.io/releases/version-skew-policy/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 07`**. It shows the commands below and asks before running them. Or run them by hand:

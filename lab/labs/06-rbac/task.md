@@ -84,6 +84,17 @@ The grader tests effective permissions with impersonation
 - `kubectl auth whoami --kubeconfig ~/rbac/jane.kubeconfig` shows who the API
   server thinks you are.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Using RBAC authorization (incl. aggregated ClusterRoles)](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+- [Certificate signing requests: normal users](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/#normal-user)
+- [Organizing cluster access using kubeconfig files](https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/)
+- [Service accounts](https://kubernetes.io/docs/concepts/security/service-accounts/)
+- [kubectl create token](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_token/)
+- [Authorization: checking API access (auth can-i)](https://kubernetes.io/docs/reference/access-authn-authz/authorization/#checking-api-access)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 06`**. It shows the commands below and asks before running them. Or run them by hand:

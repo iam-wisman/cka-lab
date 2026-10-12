@@ -68,6 +68,17 @@ lab check 05
   Proxmox), then confirm `kubectl get nodes` still works from `jump`.
   Restore afterwards.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Creating highly available clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/)
+- [kubeadm join](https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-join/)
+- [kubeadm token](https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-token/)
+- [Certificate signing requests](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/)
+- [Well-known labels, annotations and taints](https://kubernetes.io/docs/reference/labels-annotations-taints/)
+- [Operating etcd clusters for Kubernetes](https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/)
+
 ## Cleaning up
 
 `lab cleanup 05` has nothing to remove here.

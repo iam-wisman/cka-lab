@@ -68,6 +68,17 @@ Test with `curl --cacert ~/cka-root-ca.crt --resolve store.cka.lab:443:10.10.10.
   software assumes the default. If a Gateway is `Accepted` but never
   `Programmed`, read the proxy's logs.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Gateway API](https://kubernetes.io/docs/concepts/services-networking/gateway/)
+- [Gateway API: HTTPRoute](https://gateway-api.sigs.k8s.io/reference/api-types/httproute/)
+- [Gateway API: ReferenceGrant](https://gateway-api.sigs.k8s.io/reference/api-types/referencegrant/)
+- [Gateway API: traffic splitting](https://gateway-api.sigs.k8s.io/guides/traffic-splitting/)
+- [Gateway API: HTTP redirects and rewrites](https://gateway-api.sigs.k8s.io/guides/http-redirect-rewrite/)
+- [Envoy Gateway documentation](https://gateway.envoyproxy.io/docs/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 23`**. It shows the commands below and asks before running them. Or run them by hand:

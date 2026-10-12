@@ -58,6 +58,17 @@ lab check 11
 - Where does the kubelet read its runtime endpoint from? Look at its config
   file, not just its command line.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Container Runtime Interface (CRI)](https://kubernetes.io/docs/concepts/architecture/cri/)
+- [Debugging Kubernetes nodes with crictl](https://kubernetes.io/docs/tasks/debug/debug-cluster/crictl/)
+- [Runtime class](https://kubernetes.io/docs/concepts/containers/runtime-class/)
+- [Network plugins (CNI)](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/)
+- [Volumes: CSI](https://kubernetes.io/docs/concepts/storage/volumes/#csi)
+- [containerd: registry host configuration (hosts.toml)](https://github.com/containerd/containerd/blob/main/docs/hosts.md)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 11`**. It shows the commands below and asks before running them. Or run them by hand:

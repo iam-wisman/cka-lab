@@ -43,6 +43,14 @@ Configure volume types, access modes and reclaim policies
 lab check 26
 ```
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Persistent volumes (binding, reclaiming, access modes, expansion)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
+- [Volumes: local](https://kubernetes.io/docs/concepts/storage/volumes/#local)
+- [StatefulSets: PersistentVolumeClaim retention](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 26`**. It shows the commands below and asks before running them. Or run them by hand:

@@ -74,6 +74,17 @@ persisted kernel settings, `/proc/swaps` and `/etc/fstab`.
   `io.containerd.cri.v1.images`), so most older blog posts are wrong now.
 - Five nodes: consider doing one by hand, then scripting the rest.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Installing kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/)
+- [Container runtimes (modules, sysctls, cgroup drivers)](https://kubernetes.io/docs/setup/production-environment/container-runtimes/)
+- [About cgroup v2 (and the systemd cgroup driver)](https://kubernetes.io/docs/concepts/architecture/cgroups/)
+- [Debugging Kubernetes nodes with crictl](https://kubernetes.io/docs/tasks/debug/debug-cluster/crictl/)
+- [Install kubectl on Linux (incl. shell completion)](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)
+- [containerd: getting started](https://github.com/containerd/containerd/blob/main/docs/getting-started.md)
+
 ## Cleaning up
 
 `lab cleanup 01` has nothing to remove here.

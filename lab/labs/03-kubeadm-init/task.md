@@ -77,6 +77,17 @@ certificate on `cp1`, and your `~/.kube/config` on `jump`.
 - Save the `kubeadm join` commands init prints. You'll regenerate them in lab
   05 anyway: the uploaded certificates expire after two hours.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Creating a cluster with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/)
+- [kubeadm configuration (v1beta4)](https://kubernetes.io/docs/reference/config-api/kubeadm-config.v1beta4/)
+- [Kubelet configuration (v1beta1)](https://kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/)
+- [Kubelet TLS bootstrapping (serving certificates)](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/)
+- [Virtual IPs and service proxies (kube-proxy modes)](https://kubernetes.io/docs/reference/networking/virtual-ips/)
+- [Certificate management with kubeadm](https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/)
+
 ## Cleaning up
 
 `lab cleanup 03` has nothing to remove here.

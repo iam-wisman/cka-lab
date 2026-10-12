@@ -45,6 +45,14 @@ lab check 14
 - `kubectl describe hpa` explains why metrics are missing.
 - Resizing uses a dedicated subresource. Editing the pod spec the normal way is rejected.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Horizontal Pod Autoscaling (incl. behavior)](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)
+- [HorizontalPodAutoscaler walkthrough](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/)
+- [Resize CPU and memory resources assigned to containers](https://kubernetes.io/docs/tasks/configure-pod-container/resize-container-resources/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 14`**. It shows the commands below and asks before running them. Or run them by hand:

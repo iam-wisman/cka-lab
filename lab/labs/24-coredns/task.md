@@ -52,6 +52,16 @@ lab check 24
 - `kubeadm upgrade` rewrites the CoreDNS ConfigMap only when it can migrate
   it safely; keep your edits minimal and valid.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Customizing DNS service (CoreDNS)](https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/)
+- [DNS for Services and Pods (dnsPolicy, dnsConfig)](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
+- [Debugging DNS resolution](https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/)
+- [CoreDNS plugin: hosts](https://coredns.io/plugins/hosts/)
+- [CoreDNS plugin: forward](https://coredns.io/plugins/forward/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 24`**. It shows the commands below and asks before running them. Or run them by hand:

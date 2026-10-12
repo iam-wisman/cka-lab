@@ -36,6 +36,16 @@
 lab check 16
 ```
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/)
+- [StatefulSets](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
+- [Jobs (incl. indexed completion, backoffLimitPerIndex)](https://kubernetes.io/docs/concepts/workloads/controllers/job/)
+- [CronJob (incl. time zones)](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/)
+- [DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 16`**. It shows the commands below and asks before running them. Or run them by hand:

@@ -35,6 +35,15 @@ lab check 29
   (events) and `kubectl logs --previous` tell you the cause.
 - Some fields are immutable. You may have to delete and recreate an object.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Debug Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/)
+- [Determine the reason for Pod failure](https://kubernetes.io/docs/tasks/debug/debug-application/determine-reason-pod-failure/)
+- [Resource management for Pods and containers](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
+- [Pod lifecycle: container states](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-states)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 29`**. It shows the commands below and asks before running them. Or run them by hand:

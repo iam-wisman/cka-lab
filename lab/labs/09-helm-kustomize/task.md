@@ -65,6 +65,17 @@ lab check 09
   them, the apply fails, and you'll be deleting and recreating to recover.
 - `helm history` shows every revision. A rollback creates a new one.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Using Helm](https://helm.sh/docs/intro/using_helm/)
+- [helm rollback](https://helm.sh/docs/helm/helm_rollback/)
+- [Declarative management with Kustomize](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)
+- [Kustomize: labels](https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/labels/)
+- [Resource metrics pipeline (metrics-server)](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/)
+- [metrics-server](https://github.com/kubernetes-sigs/metrics-server)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 09`**. It shows the commands below and asks before running them. Or run them by hand:

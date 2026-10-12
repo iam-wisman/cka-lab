@@ -60,6 +60,14 @@ lab check 08
 - After a restore, restart kube-controller-manager, kube-scheduler and the
   kubelets so they don't act on stale cached state.
 
+## References
+
+Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
+
+- [Operating etcd clusters: backing up and restoring](https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/)
+- [Options for highly available topology (stacked etcd)](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/ha-topology/)
+- [etcd v3.6: disaster recovery](https://etcd.io/docs/v3.6/op-guide/recovery/)
+
 ## Cleaning up
 
 After `lab check` passes, run **`lab cleanup 08`**. It shows the commands below and asks before running them. Or run them by hand:
