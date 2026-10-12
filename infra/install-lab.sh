@@ -119,7 +119,7 @@ PY
 fi
 # Self-signed certificate for the jump host's LAN address; regenerated when the address changes.
 jssh "sudo openssl x509 -in /etc/cka-lab/web.crt -noout -ext subjectAltName 2>/dev/null | grep -q 'IP Address:$JUMP_IP\$\|IP Address:$JUMP_IP,' || {
-  sudo openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 -subj '/CN=CKA lab console' \
+  sudo openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 -subj '/CN=Kubernetes Playgrounds' \
     -addext 'subjectAltName=IP:$JUMP_IP,DNS:jump.cka.lab,DNS:jump' -addext 'extendedKeyUsage=serverAuth' \
     -keyout /etc/cka-lab/web.key -out /etc/cka-lab/web.crt 2>/dev/null &&
   sudo chown student:student /etc/cka-lab/web.key /etc/cka-lab/web.crt && sudo chmod 600 /etc/cka-lab/web.key; }"

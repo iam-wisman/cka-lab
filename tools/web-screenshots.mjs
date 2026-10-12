@@ -17,14 +17,15 @@ const CHROME = process.env.CHROME || "google-chrome-stable";
 if (!PASSWORD) { console.error("set CONSOLE_PASSWORD"); process.exit(2); }
 
 const SHOTS = [
-  { file: "overview.png", hash: "#/", theme: "dark" },
+  { file: "overview.png", hash: "#/" },
   // Typed into the shell at the capture width, so the replayed history doesn't wrap oddly.
-  { file: "lab.png", hash: "#/lab/08", theme: "dark",
+  { file: "lab.png", hash: "#/lab/08",
     type: `clear; for n in cp1 cp2 cp3 worker1 worker2; do ssh $n 'echo "$(hostname): $(nproc) vCPU, $(free -g | awk "/Mem/{print \\$2}") GiB, kernel $(uname -r)"' </dev/null; done; lab list | head -5` },
-  { file: "results.png", hash: "#/lab/01/results", theme: "dark" },
-  { file: "exam.png", hash: "#/exam/1", theme: "light" },
-  { file: "cluster.png", hash: "#/cluster", theme: "light" },
-  { file: "phone.png", hash: "#/", theme: "dark", width: 390, height: 844 },
+  { file: "results.png", hash: "#/lab/01/results" },
+  { file: "exam.png", hash: "#/exam/1" },
+  { file: "cluster.png", hash: "#/cluster" },
+  { file: "catalog.png", hash: "#/", scrollTo: "#labs" },
+  { file: "phone.png", hash: "#/", width: 390, height: 844 },
 ];
 
 const profile = mkdtempSync(join(tmpdir(), "cka-shots-"));
@@ -62,11 +63,14 @@ try {
   mkdirSync(OUT, { recursive: true });
   for (const shot of SHOTS) {
     await send("Emulation.setDeviceMetricsOverride", { width: shot.width || 1440, height: shot.height || 900, deviceScaleFactor: 2, mobile: !!shot.width });
-    await js(`localStorage.setItem("cka.theme", ${JSON.stringify(JSON.stringify(shot.theme))})`);
     await send("Page.navigate", { url: BASE + "/" + shot.hash });
     await sleep(500);
     await js("location.reload()");
     await sleep(4500);  // fonts, API calls, terminal replay
+    if (shot.scrollTo) {
+      await js(`document.querySelector(${JSON.stringify(shot.scrollTo)}).scrollIntoView()`);
+      await sleep(400);
+    }
     if (shot.type) {
       await js(`Terms.paste(${JSON.stringify(shot.type)}); Terms.send(Terms.active, {t: "i", d: "\\r"})`);
       await sleep(5000);

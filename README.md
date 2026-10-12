@@ -12,9 +12,11 @@ The labs are deliberately hard. You build the cluster yourself with kubeadm
 v1.34 to v1.35, restore a three-member etcd from a snapshot, and debug faults
 injected into nodes, control planes, workloads and networking.
 
-Work in the terminal over SSH, or in the **browser console** on the jump host:
-the task on the left, a real shell on the right, a **Check** button that grades
-on demand, and a timed exam mode. See [Web console](#web-console-labweb).
+Work in the terminal over SSH, or in **Kubernetes Playgrounds**, the browser
+console on the jump host: the task on the left, a real shell on the right, a
+**Check** button that grades on demand, and a timed exam mode. No hints: the
+labs are challenges, like the exam. See
+[Kubernetes Playgrounds](#kubernetes-playgrounds-web-console-labweb).
 
 <p align="center"><img src="docs/web/lab.png" alt="The lab workspace in the web console: lab 08's task on the left, a terminal on the jump host on the right" width="100%"></p>
 
@@ -100,23 +102,26 @@ lab cleanup <id> | exam <n> cleanup
 - `lab snapshot` shuts the nodes down **in parallel** before snapshotting, so
   all three etcd members are captured at one consistent point.
 
-### Web console (`lab/web/`)
+### Kubernetes Playgrounds (web console, `lab/web/`)
 
-A browser front end for the same framework, served by the jump host at
+Kubernetes Playgrounds is a browser front end for the same framework, served by the jump host at
 `https://<jump-ip>/`. It runs the same `lab` commands as the CLI, so the two
 can be mixed freely.
 
 | | |
 |---|---|
-| **Dashboard** | live status of the 7 VMs, a coverage ring per exam domain (weighted like the exam), labs passed, checks passing, best mock exam, cluster health, "next up", the lab list with filters |
+| **Dashboard** | a live `lab status` terminal card for the 7 VMs, a coverage ring per exam domain (weighted like the exam), labs passed, checks passing, best mock exam, cluster health, and the labs as a searchable, filterable card catalogue |
 | **Lab workspace** | the task (with its documentation links) beside a terminal; **Start**, **Check**, **Clean up** stream their output live; a **Results** tab lists every check, grouped, with expected-vs-found; per-lab notes saved on the jump host; solutions behind a "try first" prompt |
 | **Terminals** | real login shells (xterm.js over a WebSocket to a PTY). Sessions live on the server, so a reload or a closed tab reattaches to the same shell; several tabs; code blocks in the task have a **paste** button that types into the shell without pressing Enter |
 | **Mock exams** | briefing, optional snapshot before setup, 120-minute countdown, question navigator with weights and flags, a notepad, auto-grade when time runs out, weighted results per task, and a review mode showing which checks failed |
 | **Cluster** | power state of the 7 VMs (Proxmox API) and node status (Kubernetes), snapshots: take, delete, reset (typed confirmation; the page waits out the jump host's own rollback and reconnects) |
 
 <table><tr>
-<td><img src="docs/web/overview.png" alt="Dashboard: live VM status, the curriculum coverage ring by exam domain, stat tiles and the lab list"></td>
-<td><img src="docs/web/exam.png" alt="Mock exam briefing in the light theme: rules, cleanup, and the start panel with the snapshot option"></td>
+<td><img src="docs/web/overview.png" alt="Dashboard: the Kubernetes Playgrounds hero with a live lab status terminal card"></td>
+<td><img src="docs/web/catalog.png" alt="Lab catalogue: search, domain filters and lab cards with a header strip, tags and a status footer"></td>
+</tr><tr>
+<td><img src="docs/web/exam.png" alt="Mock exam briefing: rules, cleanup, and the start panel with the snapshot option"></td>
+<td><img src="docs/web/lab.png" alt="Lab workspace: the task card beside a terminal on the jump host"></td>
 </tr><tr>
 <td><img src="docs/web/results.png" alt="Results tab: every check grouped by node, with expected-vs-found details"></td>
 <td><img src="docs/web/cluster.png" alt="Cluster page: VM power state, node status, snapshots"></td>
@@ -142,15 +147,17 @@ How it's built:
 - **Front end:** plain JavaScript with no build step. xterm.js, marked and
   DOMPurify are vendored at pinned versions, so the console works without
   internet access.
-- **Design:** the Kubernetes palette, K8s blue `#326CE5` and white on deep navy
-  (a white-and-blue light theme follows your system setting). Shapes are soft:
-  rounded cards, pill buttons and glows rather than hard edges. The seven-sided
-  wheel is the logo mark, and the coverage ring shows progress: each arc is an
-  exam domain sized by its weight and filled by your progress, and its 31 ticks
-  are the labs. Type is Quicksand for display and numbers, Nunito for reading,
-  and Rec Mono Casual (Recursive fixed at its mono and casual settings) for
-  anything you could type. All three are OFL and served locally; their licenses
-  sit next to the files in `lab/web/static/`.
+- **Design:** inspired by the catalogue look of hands-on lab platforms such as
+  [iximiuz Labs](https://labs.iximiuz.com/): light first, a sky-blue wash at the
+  top, white cards with a tinted header strip ("Lab on Architecture · 75 min")
+  and a status footer with a progress bar, `#tags`, and outlined uppercase
+  actions. Kubernetes blue `#326CE5` is the accent, and the seven-sided wheel is
+  the logo mark. It is light only. The coverage ring shows
+  progress: each arc is an exam domain sized by its weight and filled by your
+  progress, and its 31 ticks are the labs. Type is Nunito for reading and
+  Rec Mono Casual (Recursive fixed at its mono and casual settings) for anything
+  you could type. Both are OFL and served locally; their licenses sit next to
+  the files in `lab/web/static/`.
 - **Screenshots:** made by `tools/web-screenshots.mjs`, which drives headless
   Chrome over the DevTools protocol with no npm packages.
 

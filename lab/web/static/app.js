@@ -1,4 +1,4 @@
-/* CKA lab console: front end. Plain JS, no build step.
+/* Kubernetes Playgrounds (the CKA lab web console): front end. Plain JS, no build step.
    Views: overview (#/), lab workspace (#/lab/<id>), mock exam (#/exam/<n>),
    cluster and snapshots (#/cluster). The terminal pane is created once and
    moved between workspaces so shells survive navigation. */
@@ -314,7 +314,7 @@ function showJobDialog(info) {
 // --- terminals ------------------------------------------------------------------------------------
 
 const TERM_THEME = {
-  background: "#030916", foreground: "#dfe8ff", cursor: "#5a8cff", cursorAccent: "#030916",
+  background: "#0f1626", foreground: "#dfe8ff", cursor: "#5a8cff", cursorAccent: "#0f1626",
   selectionBackground: "#326ce566",
   black: "#0f1d3d", red: "#ff6b7f", green: "#4fdca8", yellow: "#ffcf6b", blue: "#5a8cff",
   magenta: "#b99bff", cyan: "#5cd0f0", white: "#cfdaf5",
@@ -520,6 +520,19 @@ function brandMark() {
     <g stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none"><circle cx="16" cy="16" r="4.6"/>${spokes}</g></svg>`);
 }
 
+// Line icons, drawn on a 24px grid.
+const ICONS = {
+  lab: '<path d="M9.5 3h5M10.5 3v6.2L5.3 18a2 2 0 0 0 1.7 3h10a2 2 0 0 0 1.7-3l-5.2-8.8V3"/><path d="M7.6 14.5h8.8"/>',
+  exam: '<path d="M8 21h8M12 16.5V21M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 6h3v1.5A3.5 3.5 0 0 1 16.6 11M7 6H4v1.5A3.5 3.5 0 0 0 7.4 11"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  filter: '<path d="M4 5h16l-6.2 7.4V19l-3.6 2v-8.6z"/>',
+  server: '<rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/>',
+  chart: '<path d="M4 20V4M4 20h16"/><path d="m8 15 3.5-4 3 2.5L19 8"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+};
+const icon = name => svgEl(`<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`);
+
 // Coverage ring: one arc per exam domain, sized by its exam weight, filled by your progress.
 // The outer ticks are the 31 labs, lit when passed.
 function domainRing(domains, labs) {
@@ -547,22 +560,9 @@ function domainRing(domains, labs) {
 
 // --- chrome ------------------------------------------------------------------------------------
 
-function theme(next) {
-  const order = ["auto", "light", "dark"];
-  let t = store.get("theme", "auto");
-  if (next) { t = order[(order.indexOf(t) + 1) % 3]; store.set("theme", t); }
-  if (t === "auto") document.documentElement.removeAttribute("data-theme");
-  else document.documentElement.setAttribute("data-theme", t);
-  const b = $("#theme-btn");
-  if (b) {
-    b.replaceChildren({ auto: "◐", light: "○", dark: "●" }[t], h("span", { class: "label" }, ` ${t}`));
-    b.title = `Theme: ${t} (click to change)`;
-  }
-}
-
 function renderTop() {
   const top = h("header", { class: "top" },
-    h("a", { class: "brand", href: "#/", title: "Overview" }, brandMark(), h("span", { class: "brand-text" }, "CKA", h("b", {}, "/"), "Lab")),
+    h("a", { class: "brand", href: "#/", title: "Overview" }, brandMark(), h("span", { class: "brand-text" }, "Kubernetes ", h("b", {}, "Playgrounds"))),
     h("nav", { class: "nav" },
       h("a", { href: "#/", "data-r": "labs" }, "Labs"),
       h("a", { href: "#/exams", "data-r": "exams" }, "Exams"),
@@ -571,7 +571,6 @@ function renderTop() {
     h("div", { class: "tools" },
       h("span", { id: "job-slot" }),
       h("a", { class: "pill", id: "health", href: "#/cluster", title: "Kubernetes nodes Ready" }, h("span", { class: "dot" }), h("span", { class: "label" }, "cluster")),
-      h("button", { class: "btn quiet sm mono", id: "theme-btn", onclick: () => theme(true) }),
       h("button", { class: "btn quiet sm", onclick: logout }, "Log out")));
   return top;
 }
@@ -604,18 +603,23 @@ function renderClusterBits() {
   const c = S.cluster, strip = $("#vm-strip"), tile = $("#tile-cluster");
   if (strip && c) {
     const byName = Object.fromEntries((c.nodes || []).map(n => [n.name, n]));
-    strip.replaceChildren(...c.vms.map(vm => {
-      const node = byName[vm.name];
-      const cls = vm.status !== "running" ? "bad" : node ? (node.ready ? "ok" : "bad") : vm.role === "node" && vm.name !== "nfs" && c.nodes ? "warn" : "ok";
-      return h("span", { class: "vm-led", title: `${vm.name}: VM ${vm.status || "unknown"}${node ? `, node ${node.ready ? "Ready" : "NotReady"}` : ""}` }, h("span", { class: "dot " + cls }), vm.name);
-    }));
+    const role = vm => vm.name === "jump" ? "jump host" : vm.name === "nfs" ? "NFS server" : c.nodes && c.nodes.length ? "not joined" : "no cluster yet";
+    strip.replaceChildren(
+      h("div", {}, h("span", { class: "p" }, "$ "), "lab status"),
+      ...c.vms.map(vm => {
+        const node = byName[vm.name], st = vm.status || "unknown";
+        return h("div", {}, h("span", { class: "n" }, vm.name.padEnd(9)), h("span", { class: st === "running" ? "ok" : "bad" }, st.padEnd(9)),
+          node ? h("span", { class: node.ready ? "ok" : "bad" }, node.ready ? "Ready" : "NotReady", h("span", { class: "m" }, node.version ? ` ${node.version}` : ""))
+            : h("span", { class: "m" }, role(vm)));
+      }),
+      h("div", {}, h("span", { class: "p" }, "$ "), h("span", { class: "cursor" })));
   }
   if (tile && c) {
     const nodes = c.nodes || [];
     const ready = nodes.filter(n => n.ready).length;
     const up = c.vms.filter(v => v.status === "running").length;
     tile.replaceChildren(
-      h("div", { class: "label-sm" }, "Cluster"),
+      h("div", { class: "label-sm" }, icon("server"), "Cluster"),
       h("div", { class: "num" }, nodes.length ? ready : "—", nodes.length ? h("small", {}, ` / ${nodes.length}`) : null),
       h("div", { class: "note" }, nodes.length ? `nodes Ready · ${nodes[0].version || ""}` : `no cluster yet · ${up}/${c.vms.length} VMs running`),
       h("div", { class: "meter" }, h("i", { style: { width: `${nodes.length ? (ready / nodes.length) * 100 : 0}%` } })));
@@ -641,7 +645,7 @@ function showLogin() {
   cleanupView();
   const pw = h("input", { class: "field", type: "password", id: "pw", autocomplete: "current-password", required: true });
   const err = h("div", { class: "err" });
-  const btn = h("button", { class: "btn solid", type: "submit" }, "Open the console");
+  const btn = h("button", { class: "btn solid", type: "submit" }, "Sign in");
   const form = h("form", {
     onsubmit: async e => {
       e.preventDefault(); btn.disabled = true; err.textContent = "";
@@ -652,9 +656,9 @@ function showLogin() {
       } catch (x) { err.textContent = x.message; btn.disabled = false; pw.select(); }
     },
   },
-    h("a", { class: "brand", href: "#/" }, brandMark(), h("span", { class: "brand-text" }, "CKA", h("b", {}, "/"), "Lab")),
-    h("h1", {}, "Jump host console"),
-    h("p", {}, "Labs, mock exams and a shell on the jump host, in the browser. Sign in with the student password."),
+    h("a", { class: "brand", href: "#/" }, brandMark(), h("span", { class: "brand-text" }, "Kubernetes ", h("b", {}, "Playgrounds"))),
+    h("h1", {}, "Sign in"),
+    h("p", {}, "Your CKA labs, mock exams and a shell on the jump host, in the browser. Use the student password."),
     h("label", { for: "pw" }, "Password"), pw, btn, err);
   form.classList.add("hud");
   form.querySelector("label").className = "label-sm";
@@ -692,18 +696,31 @@ async function route() {
 
 // --- overview --------------------------------------------------------------------------------------
 
-function scoreCell(lab) {
-  if (lab.best == null) return lab.started_at ? h("span", { class: "tag" }, "started") : h("span", { class: "muted mono" }, "—");
-  const r = lab.result || {};
-  const pct = Math.round(lab.best * 100);
-  return h("div", { class: "score" + (lab.best === 1 ? " full" : "") },
-    h("span", { class: "track" }, h("i", { style: { width: `${pct}%` } })),
-    lab.best === 1 ? "passed" : `${r.pass ?? "?"}/${r.total ?? "?"}`);
-}
-
-function domainChip(key) {
-  const i = DOMAINS.indexOf(domainOf(key));
-  return h("span", { class: "domain-chip" }, h("i", { style: { background: i < 0 ? "var(--muted)" : `var(--d${i + 1})` } }), shortDomain(key));
+// One catalogue card per lab: a header strip, the brief, and a status footer.
+function labCard(l, next) {
+  const i = DOMAINS.indexOf(domainOf(l.domain));
+  const r = l.result;
+  const state = labPassed(l) ? "passed" : r ? "graded" : l.started_at ? "started" : "new";
+  const href = `#/lab/${l.id}`;
+  const pct = Math.round((l.best || 0) * 100);
+  return h("article", { class: `lab-card hud ${state}` },
+    h("header", {}, icon("lab"), h("span", {}, "Lab on ", h("b", {}, shortDomain(l.domain))),
+      h("i", { class: "dom", style: { background: i < 0 ? "var(--muted)" : `var(--d${i + 1})` } }),
+      h("span", { class: "grow" }), l.minutes ? h("span", { class: "min" }, icon("clock"), `${l.minutes} min`) : null),
+    h("div", { class: "body" },
+      h("h3", {}, h("a", { href }, h("span", { class: "no" }, l.num), l.title)),
+      h("p", { class: "cur" }, l.curriculum.join(" · ")),
+      h("div", { class: "tags" },
+        h("span", { class: "tag" }, `#${l.id.replace(/^\d+-/, "")}`),
+        l.phases.length ? h("span", { class: "tag" }, "#breaks-things") : null,
+        l.needs.length ? h("span", { class: "tag" }, `needs ${l.needs.join(", ")}`) : null)),
+    h("footer", {},
+      h("div", { class: "prog" },
+        h("span", { class: "label-sm" }, { passed: "Passed", graded: "Last check", started: "Started", new: "Status" }[state]),
+        h("span", { class: "val" }, state === "passed" ? `all ${r ? r.total : ""} checks pass` : state === "graded" ? `${r.pass}/${r.total} checks · ${ago(r.at)}`
+          : state === "started" ? ago(l.started_at) : "not started"),
+        h("span", { class: "bar" }, h("i", { style: { width: `${pct}%` } }))),
+      h("a", { class: "btn" + (l === next ? " solid" : ""), href }, { passed: "Review", graded: "Continue", started: "Continue", new: "Start lab" }[state])));
 }
 
 async function viewOverview(main, focus) {
@@ -722,78 +739,87 @@ async function viewOverview(main, focus) {
   const next = labs.find(l => !labPassed(l));
 
   let filter = store.get("labFilter", "all");
-  const tbody = h("tbody");
+  let query = "";
+  const grid = h("div", { class: "lab-grid" });
   const filters = h("div", { class: "filters" });
-  const drawRows = () => {
+  const search = h("input", { class: "search-input", type: "search", placeholder: "Search labs: etcd, gateway, PVC…", "aria-label": "Search labs",
+    oninput: e => { query = e.target.value.trim().toLowerCase(); drawCards(); } });
+  const drawCards = () => {
     filters.replaceChildren(...[["all", "All"], ["todo", "Not passed"], ...DOMAINS.map(d => [d.key, d.short || d.name])].map(([k, label]) =>
-      h("button", { class: filter === k ? "on" : "", onclick: () => { filter = k; store.set("labFilter", k); drawRows(); } }, label)));
-    const shown = labs.filter(l => filter === "all" || (filter === "todo" ? !labPassed(l) : domainOf(l.domain).key === filter));
-    tbody.replaceChildren(...shown.map(l => h("tr", { class: "row" + (labPassed(l) ? " done" : ""), onclick: () => { location.hash = `#/lab/${l.id}`; } },
-      h("td", { class: "num" }, l.num),
-      h("td", {}, h("a", { class: "t", href: `#/lab/${l.id}` }, l.title),
-        h("div", { class: "cur" }, l.curriculum.join(" · "))),
-      h("td", { class: "dom" }, domainChip(l.domain)),
-      h("td", { class: "min" }, l.minutes ? `${l.minutes}m` : ""),
-      h("td", { class: "st" }, scoreCell(l)),
-      h("td", { class: "go" }, "→"))));
-    if (!shown.length) tbody.append(h("tr", {}, h("td", { colspan: 6, class: "muted", style: { padding: "20px" } }, "Nothing here.")));
+      h("button", { class: filter === k ? "on" : "", onclick: () => { filter = k; store.set("labFilter", k); drawCards(); } }, label)));
+    const shown = labs.filter(l => (filter === "all" || (filter === "todo" ? !labPassed(l) : domainOf(l.domain).key === filter))
+      && (!query || `${l.num} ${l.id} ${l.title} ${l.curriculum.join(" ")}`.toLowerCase().includes(query)));
+    grid.replaceChildren(...shown.map(l => labCard(l, next)));
+    if (!shown.length) grid.append(h("div", { class: "empty" }, "No lab matches."));
   };
-  drawRows();
+  drawCards();
 
   const examsSection = h("section", { id: "exams" },
-    h("div", { class: "section-head" }, h("h2", {}, "Mock exams"), h("span", { class: "grow" }),
-      h("span", { class: "label-sm" }, "120 min · weighted · pass 66 %")),
-    h("div", { class: "exam-rows" }, data.exams.map(e => {
+    h("div", { class: "section-head" }, h("h2", {}, icon("exam"), "Mock exams"),
+      h("span", { class: "sub" }, "120 minutes · weighted tasks · pass mark 66 %")),
+    h("div", { class: "lab-grid" }, data.exams.map(e => {
       const running = e.deadline && !e.submitted_at && e.deadline * 1000 > Date.now();
-      return h("a", { class: "exam-row hud", href: `#/exam/${e.n}` },
-        h("div", { class: "n" }, e.n),
-        h("div", {},
-          h("h3", {}, e.title.replace(/^CKA m/, "M").replace(/^CKA /, "")),
-          h("div", { class: "meta" }, `${e.tasks} tasks · ${e.minutes} minutes · all five domains`),
-          h("div", { class: "hist" },
+      const best = e.history.length ? Math.max(...e.history.map(x => x.score)) : null;
+      return h("article", { class: "lab-card exam-card hud" + (best != null && best >= 66 ? " passed" : "") },
+        h("header", {}, icon("exam"), h("span", {}, "Mock exam ", h("b", {}, e.n)), h("span", { class: "grow" }),
+          h("span", { class: "min" }, icon("clock"), `${e.minutes} min`)),
+        h("div", { class: "body" },
+          h("h3", {}, h("a", { href: `#/exam/${e.n}` }, e.title.replace(/^CKA m/, "M").replace(/^CKA /, ""))),
+          h("p", { class: "cur" }, `${e.tasks} tasks across all five domains, timed and graded like the real exam.`),
+          h("div", { class: "tags" },
             running ? h("span", { class: "tag mark" }, "in progress") : null,
             e.history.length ? e.history.slice(-5).map(x => h("span", { class: "tag " + (x.passed ? "pass" : "fail") }, `${x.score}%`))
-              : !running && h("span", { class: "tag" }, "not attempted"))),
-        h("span", { class: "go" }, "Open →"));
+              : !running && h("span", { class: "tag" }, "#not-attempted"))),
+        h("footer", {},
+          h("div", { class: "prog" }, h("span", { class: "label-sm" }, "Best score"),
+            h("span", { class: "val" }, best == null ? "—" : `${best} %`),
+            h("span", { class: "bar" }, h("i", { style: { width: `${best || 0}%` } }), h("b", { class: "mark", title: "pass mark" }))),
+          h("a", { class: "btn" + (running ? " solid" : ""), href: `#/exam/${e.n}` }, running ? "Resume" : e.history.length ? "Retake" : "Start exam")));
     })));
 
-  const wheel = brandMark();
-  wheel.classList.add("wheel-bg");
+  const term = h("div", { class: "term-card" },
+    h("div", { class: "term-card-bar" }, h("i"), h("i"), h("i"), h("span", {}, "student@jump")),
+    h("div", { class: "term-card-body", id: "vm-strip" }, h("div", {}, h("span", { class: "p" }, "$ "), "lab status")));
+
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
     h("section", { class: "hero" },
-      h("div", { class: "hero-main hud" }, h("div", { class: "wheel-clip" }, wheel),
-        h("div", { class: "label-sm blue" }, "CKA · Kubernetes v1.35 · 7-VM HA lab"),
-        h("h1", {}, "Certified Kubernetes ", h("em", {}, "Administrator")),
-        h("p", {}, "31 hands-on labs in curriculum order and two timed mock exams, graded live against a cluster you build yourself."),
-        h("div", { class: "vm-strip", id: "vm-strip" }),
-        next ? h("div", { class: "next" },
-          h("div", { class: "what" }, h("span", { class: "label-sm" }, next.started_at ? "Resume" : "Next up"),
-            h("span", { class: "t" }, `Lab ${next.num} · ${next.title}`)),
-          h("a", { class: "btn solid", href: `#/lab/${next.id}` }, next.started_at ? "Resume lab" : "Open lab")) : h("div", { class: "next" }, h("b", {}, "Every lab passed. Time for a mock exam."))),
+      h("div", { class: "hero-text" },
+        h("div", { class: "kicker" }, "CKA · Kubernetes v1.35"),
+        h("h1", {}, "Master Kubernetes ", h("em", {}, "by breaking it")),
+        h("p", { class: "lead" }, h("b", {}, "31 hands-on labs"), " in curriculum order and ", h("b", {}, "two timed mock exams"),
+          ", graded check by check against a 7-VM cluster you build yourself. No hints, like the real exam."),
+        h("div", { class: "cta" },
+          next ? h("a", { class: "btn solid lg", href: `#/lab/${next.id}` }, next.started_at ? `Resume lab ${next.num}` : `Start lab ${next.num}`, icon("arrow"))
+            : h("a", { class: "btn solid lg", href: "#/exams" }, "Take a mock exam", icon("arrow")),
+          h("a", { class: "btn lg", href: "#/exams" }, "Mock exams"))),
+      term),
+    h("div", { class: "section-head" }, h("h2", {}, icon("chart"), "Progress")),
+    h("section", { class: "stats" },
       h("div", { class: "ring-panel hud" },
-        h("div", { class: "head" }, h("span", { class: "label-sm" }, "Curriculum coverage"), h("span", { class: "label-sm blue" }, "by exam weight")),
-        h("div", { class: "ring" }, domainRing(perDomain, labs),
-          h("div", { class: "ring-center" }, h("b", {}, coverage, h("small", {}, "%")), h("span", {}, `${passed} of ${labs.length} labs`))),
-        h("div", { class: "legend" }, perDomain.map((d, i) => [
-          h("span", {}, h("span", { class: "sw", style: { background: `var(--d${i + 1})` } }), d.short || d.name),
-          h("span", { class: "n" }, `${d.done}/${d.labs.length}`),
-          h("span", { class: "n" }, `${d.weight}%`)])))),
-    h("section", { class: "tiles" },
-      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, "Labs passed"),
+        h("div", { class: "head" }, h("span", { class: "label-sm" }, "Curriculum coverage"), h("span", { class: "label-sm muted" }, "by exam weight")),
+        h("div", { class: "ring-row" },
+          h("div", { class: "ring" }, domainRing(perDomain, labs),
+            h("div", { class: "ring-center" }, h("b", {}, coverage, h("small", {}, "%")), h("span", {}, `${passed} of ${labs.length} labs`))),
+          h("div", { class: "legend" }, perDomain.map((d, i) => [
+            h("span", {}, h("span", { class: "sw", style: { background: `var(--d${i + 1})` } }), d.short || d.name),
+            h("span", { class: "n" }, `${d.done}/${d.labs.length}`),
+            h("span", { class: "n" }, `${d.weight}%`)])))),
+      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, icon("lab"), "Labs passed"),
         h("div", { class: "num" }, passed, h("small", {}, ` / ${labs.length}`)),
         h("div", { class: "leds", title: "One cell per lab" }, labs.map(l => h("i", { class: labPassed(l) ? "on" : l.best ? "part" : "", title: `Lab ${l.num}` })))),
-      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, "Checks passing"),
+      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, icon("chart"), "Checks passing"),
         h("div", { class: "num" }, checksTotal ? Math.round(checksPass * 100 / checksTotal) : "—", checksTotal ? h("small", {}, " %") : null),
         h("div", { class: "note" }, checksTotal ? `${checksPass} of ${checksTotal} in ${graded.length} graded lab${graded.length === 1 ? "" : "s"}` : "no lab graded yet"),
         h("div", { class: "meter" }, h("i", { style: { width: `${checksTotal ? (checksPass / checksTotal) * 100 : 0}%` } }))),
-      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, "Best mock exam"),
+      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, icon("exam"), "Best mock exam"),
         h("div", { class: "num", style: { color: examBest >= 66 ? "var(--pass)" : "" } }, examBest < 0 ? "—" : examBest, examBest < 0 ? null : h("small", {}, " %")),
         h("div", { class: "note" }, examBest < 0 ? "not attempted yet" : examBest >= 66 ? "above the 66 % pass mark" : "pass mark is 66 %"),
         h("div", { class: "meter" }, h("i", { style: { width: `${Math.max(0, examBest)}%` } }), h("span", { class: "mark", style: { left: "66%" }, title: "pass mark" }))),
-      h("div", { class: "tile hud", id: "tile-cluster" }, h("div", { class: "label-sm" }, "Cluster"), h("div", { class: "num" }, "…"))),
+      h("div", { class: "tile hud", id: "tile-cluster" }, h("div", { class: "label-sm" }, icon("server"), "Cluster"), h("div", { class: "num" }, "…"))),
     h("section", { id: "labs" },
-      h("div", { class: "section-head" }, h("h2", {}, "Labs"), h("span", { class: "grow" }), filters),
-      h("div", { class: "ledger-box hud" }, h("table", { class: "ledger" }, tbody))),
+      h("div", { class: "section-head" }, h("h2", {}, icon("lab"), "Labs"), h("span", { class: "sub" }, `${passed} of ${labs.length} passed`)),
+      h("div", { class: "filterbar hud" }, h("label", { class: "search" }, icon("search"), search), h("span", { class: "fl" }, icon("filter")), filters),
+      grid),
     examsSection)));
   renderClusterBits();
   if (focus === "exams") examsSection.scrollIntoView();
@@ -1269,11 +1295,11 @@ async function viewCluster(main) {
     h("span", {}, h("a", { href: "#/cluster", class: "mono", onclick: e => { e.preventDefault(); showJobDialog(j); } }, j.label), h("span", { class: "muted" }, ` · ${ago(j.started)}`)))));
 
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "section-head", style: { marginTop: 0 } }, h("h2", {}, "Machines"), h("span", { class: "grow" }),
+    h("div", { class: "section-head", style: { marginTop: 0 } }, h("h2", {}, icon("server"), "Machines"), h("span", { class: "grow" }),
       h("span", { class: "muted", style: { fontSize: "13px" } }, "Proxmox power state and Kubernetes node status, refreshed every 10 s")),
     h("div", { class: "rack-box hud" }, h("table", { class: "rack" },
       h("thead", {}, h("tr", {}, ["VM", "ID", "Address", "Size", "Power", "Kubernetes"].map(t => h("th", {}, t)))), rack)),
-    h("div", { class: "section-head" }, h("h2", {}, "Snapshots")),
+    h("div", { class: "section-head" }, h("h2", {}, icon("clock"), "Snapshots")),
     h("div", { class: "callout" }, h("b", {}, "Snapshots are your undo button. "),
       "Take one before any lab that changes nodes or the control plane (01–08, 27, 28 and the mock exams). ",
       h("span", { class: "mono" }, "base"), " is bare Ubuntu: resetting to it starts the whole course over."),
@@ -1282,7 +1308,7 @@ async function viewCluster(main) {
       h("thead", {}, h("tr", {}, ["Name", "Taken", "VMs", ""].map(t => h("th", {}, t)))), snaps)),
     h("div", { class: "inline-form" }, nameField, takeBtn),
     drawer,
-    h("div", { class: "section-head" }, h("h2", {}, "Recent jobs")),
+    h("div", { class: "section-head" }, h("h2", {}, icon("chart"), "Recent jobs")),
     jobsList)));
 
   const busy = () => { takeBtn.disabled = !!S.jobs.current; drawJobs(); };
@@ -1319,11 +1345,9 @@ function waitForReturn(title) {
 // --- boot ---------------------------------------------------------------------------------------------------
 
 async function boot() {
-  theme();
   const h0 = await fetch("/api/health", { cache: "no-store" }).then(r => r.json()).catch(() => ({ authed: false }));
   if (!h0.authed) { showLogin(); return; }
   $("#app").replaceChildren(renderTop(), h("main", { id: "main", style: { flex: "1", display: "flex", flexDirection: "column", minHeight: "0" } }));
-  theme();
   await Jobs.sync();
   pollCluster();
   if (!S.polling) S.polling = setInterval(pollCluster, 20000);

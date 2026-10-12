@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""lab-web: the browser console for the CKA lab.
+"""lab-web: Kubernetes Playgrounds, the browser console for the CKA lab.
 
 Runs on the jump host as `student` (systemd unit lab-web.service) and serves:
 
