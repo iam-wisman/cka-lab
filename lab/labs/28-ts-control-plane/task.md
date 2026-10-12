@@ -43,7 +43,7 @@ lab check 28
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 28`**. It shows the commands below and asks before running them. Or run them by hand:
 
 Nothing to remove. Make sure no backup copies of manifests were left in the
 manifests directory: the kubelet would run them as extra pods.

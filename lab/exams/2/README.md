@@ -19,7 +19,7 @@ Rules, like the real exam:
 **Recommended:** `lab reset before-exam2`. Some tasks break worker1's kubelet and
 cp3's API server, and a reset undoes whatever you didn't fix.
 
-To clean up by hand instead (after fixing tasks 1 and 2):
+Otherwise, after fixing tasks 1 and 2, run **`lab exam 2 cleanup`**, which runs these commands:
 
 ```bash
 kubectl delete namespace e2-t3 e2-t4 e2-t5 e2-t7 e2-t8 e2-t10 e2-t11 e2-t12 e2-t13 e2-t14 e2-t15 e2-t16

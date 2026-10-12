@@ -45,7 +45,7 @@ lab check 20
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 20`**. It shows the commands below and asks before running them. Or run them by hand:
 
 ```bash
 kubectl delete namespace lb          # releases 10.10.10.205 and the other addresses

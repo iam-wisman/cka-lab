@@ -61,7 +61,7 @@ lab check 25
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 25`**. It shows the commands below and asks before running them. Or run them by hand:
 
 Deleting the namespace deletes the PVC, but the StorageClass reclaim policy
 is **Retain**, so the PV (now `Released`) and its data on the NFS server

@@ -46,12 +46,12 @@ lab check 18
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 18`**. It shows the commands below and asks before running them. Or run them by hand:
 
 ```bash
 kubectl delete namespace team-a
 kubectl delete priorityclass critical-batch best-effort-batch
-ssh worker1 sudo rm /etc/kubernetes/manifests/static-web.yaml   # the mirror pod disappears with it
+ssh worker1 sudo rm -f /etc/kubernetes/manifests/static-web.yaml   # the mirror pod disappears with it
 rm -f ~/answers/18-static-path.txt
 ```
 

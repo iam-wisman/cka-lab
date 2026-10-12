@@ -76,7 +76,7 @@ persisted kernel settings, `/proc/swaps` and `/etc/fstab`.
 
 ## Cleaning up
 
-After `lab check` passes:
+`lab cleanup 01` has nothing to remove here.
 
 Nothing to remove: what you built here **is** the cluster every later lab
 uses. Take a snapshot instead so you can come back to this point:

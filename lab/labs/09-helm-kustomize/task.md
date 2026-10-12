@@ -67,7 +67,7 @@ lab check 09
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 09`**. It shows the commands below and asks before running them. Or run them by hand:
 
 ```bash
 kubectl delete -k ~/kustomize/overlays/prod      # also deletes namespace prod (the overlay owns it)

@@ -19,11 +19,13 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
   lab start <id> [phase]        prepare the cluster for a lab (runs its setup; some labs have phases)
   lab check <id>                grade a lab
   lab solution <id>             show the worked solution (after you've tried!)
+  lab cleanup <id> [--yes]      remove what a finished lab left behind (keeps what later labs need)
 
   lab exam <n> start            begin mock exam <n>: sets up all tasks, 120 min timer
   lab exam <n> show [task]      print the exam paper, or one task
   lab exam <n> check            grade the exam (weighted, pass mark ${EXAM_PASS}%)
   lab exam <n> status           time remaining
+  lab exam <n> cleanup [--yes]  remove the exam's leftovers (lab reset before-exam<n> is cleaner)
 
   lab snapshots                 list cluster snapshots
   lab snapshot <name>           snapshot every lab VM (briefly stops the nodes)
@@ -95,6 +97,30 @@ cmd_solution() {
   if command -v glow >/dev/null; then glow -p "$f"; else less -FRX "$f"; fi
 }
 
+# run_cleanup <script> <label> [--yes]: show what will run, confirm, run it.
+run_cleanup() {
+  local script=$1 label=$2 yes=${3:-}
+  echo "${c_bold}Cleanup for $label${c_off} will run:"
+  echo
+  sed '1,/^set -uo pipefail$/d' "$script" | sed 's/^/    /'
+  echo
+  if [[ $yes != --yes ]]; then
+    read -rp "Run it? [y/N] " ok
+    [[ $ok == y ]] || { echo "Nothing changed."; return 0; }
+  fi
+  bash "$script" && info "$label cleaned up" || info "$label cleanup finished with errors (see above); running it again is safe"
+}
+
+cmd_cleanup() {
+  local d id; d=$(lab_dir "$1"); id=$(basename "$d")
+  if [[ ! -f $d/cleanup.sh ]]; then
+    info "Nothing to clean up for $id: it built part of the cluster the later labs use."
+    info "Save this point instead: lab snapshot after-${id%%-*}"
+    return 0
+  fi
+  run_cleanup "$d/cleanup.sh" "$id" "${2:-}"
+}
+
 # --- mock exams ----------------------------------------------------------------
 
 exam_dir() { [[ -d $LAB_HOME/exams/$1 ]] || die "no mock exam $1"; echo "$LAB_HOME/exams/$1"; }
@@ -156,6 +182,12 @@ cmd_exam() {
       if (( pct >= EXAM_PASS )); then echo "${c_green}${c_bold}Score ${pct}% - PASS (needs ${EXAM_PASS}%)${c_off}"
       else echo "${c_red}${c_bold}Score ${pct}% - FAIL (needs ${EXAM_PASS}%)${c_off}"; fi
       echo "Per-check detail: GRADE_ID=... lab check is not used for exams; run bash $d/tasks/<task>/check.sh"
+      ;;
+    cleanup)
+      [[ -f $d/cleanup.sh ]] || die "exam $n has no cleanup script"
+      echo "${c_yellow}Tip:${c_off} 'lab reset before-exam$n' also undoes faults you didn't fix."
+      run_cleanup "$d/cleanup.sh" "mock exam $n" "${3:-}"
+      rm -rf "$st"
       ;;
     *) usage; exit 2 ;;
   esac
@@ -237,6 +269,7 @@ case ${1:-} in
   start) shift; cmd_start "${1:?lab id}" "${@:2}" ;;
   check|grade) cmd_check "${2:?lab id}" ;;
   solution) cmd_solution "${2:?lab id}" ;;
+  cleanup|clean) cmd_cleanup "${2:?lab id}" "${3:-}" ;;
   exam) shift; cmd_exam "$@" ;;
   snapshots) cmd_snapshots ;;
   snapshot) cmd_snapshot "${2:-}" ;;

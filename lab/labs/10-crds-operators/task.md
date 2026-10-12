@@ -84,7 +84,7 @@ server to reject them.
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 10`**. It shows the commands below and asks before running them. Or run them by hand:
 
 ```bash
 kubectl delete namespace ops

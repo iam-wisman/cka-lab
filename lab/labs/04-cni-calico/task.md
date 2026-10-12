@@ -73,7 +73,7 @@ lab check 04
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 04`**. It shows the commands below and asks before running them. Or run them by hand:
 
 Remove only the answer file:
 

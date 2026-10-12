@@ -47,7 +47,7 @@ lab check 12
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 12`**. It shows the commands below and asks before running them. Or run them by hand:
 
 ```bash
 kubectl delete namespace rollout

@@ -40,7 +40,7 @@ lab check 31
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 31`**. It shows the commands below and asks before running them. Or run them by hand:
 
 ```bash
 kubectl delete namespace ts-obs

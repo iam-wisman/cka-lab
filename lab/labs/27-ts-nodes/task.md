@@ -35,7 +35,7 @@ lab check 27
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 27`**. It shows the commands below and asks before running them. Or run them by hand:
 
 Nothing to remove: the fixed nodes are the end state. Check you didn't leave
 anything behind:

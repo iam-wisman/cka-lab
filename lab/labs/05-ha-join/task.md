@@ -70,7 +70,7 @@ lab check 05
 
 ## Cleaning up
 
-After `lab check` passes:
+`lab cleanup 05` has nothing to remove here.
 
 Approved and denied CSRs are garbage-collected by the cluster after an hour. Nothing else to remove. Take the snapshot the lab asks for, if you haven't:
 

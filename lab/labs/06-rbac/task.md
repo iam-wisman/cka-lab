@@ -86,7 +86,7 @@ The grader tests effective permissions with impersonation
 
 ## Cleaning up
 
-After `lab check` passes:
+After `lab check` passes, run **`lab cleanup 06`**. It shows the commands below and asks before running them. Or run them by hand:
 
 ```bash
 kubectl delete namespace dev staging ci          # removes the Roles, RoleBindings, SA, Deployments, Secret
