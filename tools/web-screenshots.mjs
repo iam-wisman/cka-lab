@@ -22,8 +22,9 @@ const SHOTS = [
   { file: "lab.png", hash: "#/lab/08", theme: "dark",
     type: `clear; for n in cp1 cp2 cp3 worker1 worker2; do ssh $n 'echo "$(hostname): $(nproc) vCPU, $(free -g | awk "/Mem/{print \\$2}") GiB, kernel $(uname -r)"' </dev/null; done; lab list | head -5` },
   { file: "results.png", hash: "#/lab/01/results", theme: "dark" },
-  { file: "exam.png", hash: "#/exam/1/review", theme: "light" },
+  { file: "exam.png", hash: "#/exam/1", theme: "light" },
   { file: "cluster.png", hash: "#/cluster", theme: "light" },
+  { file: "phone.png", hash: "#/", theme: "dark", width: 390, height: 844 },
 ];
 
 const profile = mkdtempSync(join(tmpdir(), "cka-shots-"));
@@ -60,6 +61,7 @@ try {
 
   mkdirSync(OUT, { recursive: true });
   for (const shot of SHOTS) {
+    await send("Emulation.setDeviceMetricsOverride", { width: shot.width || 1440, height: shot.height || 900, deviceScaleFactor: 2, mobile: !!shot.width });
     await js(`localStorage.setItem("cka.theme", ${JSON.stringify(JSON.stringify(shot.theme))})`);
     await send("Page.navigate", { url: BASE + "/" + shot.hash });
     await sleep(500);

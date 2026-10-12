@@ -108,19 +108,21 @@ can be mixed freely.
 
 | | |
 |---|---|
-| **Overview** | progress per lab, curriculum coverage weighted by the five exam domains, "next up", mock exam history |
+| **Dashboard** | live status of the 7 VMs, a coverage ring per exam domain (weighted like the exam), labs passed, checks passing, best mock exam, cluster health, "next up", the lab list with filters |
 | **Lab workspace** | the task (with its documentation links) beside a terminal; **Start**, **Check**, **Clean up** stream their output live; a **Results** tab lists every check, grouped, with expected-vs-found; per-lab notes saved on the jump host; solutions behind a "try first" prompt |
 | **Terminals** | real login shells (xterm.js over a WebSocket to a PTY). Sessions live on the server, so a reload or a closed tab reattaches to the same shell; several tabs; code blocks in the task have a **paste** button that types into the shell without pressing Enter |
 | **Mock exams** | briefing, optional snapshot before setup, 120-minute countdown, question navigator with weights and flags, a notepad, auto-grade when time runs out, weighted results per task, and a review mode showing which checks failed |
 | **Cluster** | power state of the 7 VMs (Proxmox API) and node status (Kubernetes), snapshots: take, delete, reset (typed confirmation; the page waits out the jump host's own rollback and reconnects) |
 
 <table><tr>
-<td><img src="docs/web/overview.png" alt="Overview page: labs passed, curriculum coverage by exam domain, the lab list"></td>
-<td><img src="docs/web/exam.png" alt="Mock exam review: question navigator coloured by result, task text and the checks that failed"></td>
+<td><img src="docs/web/overview.png" alt="Dashboard: live VM status, the curriculum coverage ring by exam domain, stat tiles and the lab list"></td>
+<td><img src="docs/web/exam.png" alt="Mock exam briefing in the light theme: rules, cleanup, and the start panel with the snapshot option"></td>
 </tr><tr>
 <td><img src="docs/web/results.png" alt="Results tab: every check grouped by node, with expected-vs-found details"></td>
 <td><img src="docs/web/cluster.png" alt="Cluster page: VM power state, node status, snapshots"></td>
 </tr></table>
+
+<p align="center"><img src="docs/web/phone.png" width="260" alt="The dashboard at phone width"></p>
 
 How it's built:
 
@@ -139,10 +141,15 @@ How it's built:
   for the jump host's address, so the browser asks you to accept it once.
 - **Front end:** plain JavaScript with no build step. xterm.js, marked and
   DOMPurify are vendored at pinned versions, so the console works without
-  internet access. Type is Schibsted Grotesk for text and Commit Mono for
-  everything you could type (both OFL, served locally; licenses sit next to
-  the files in `lab/web/static/`). It has light and dark
-  themes, and the terminal stays a dark screen in both.
+  internet access.
+- **Design:** the Kubernetes palette, K8s blue `#326CE5` and white on deep navy
+  (a white-and-blue light theme follows your system setting). It has a blueprint
+  grid, HUD-style panel corners and the seven-sided wheel as a motif: in the logo
+  mark, the mock exam badges, and the coverage ring. Each arc of the ring is an
+  exam domain sized by its weight and filled by your progress, and its 31 ticks
+  are the labs. Type is Tektur for display and numbers, Schibsted Grotesk for
+  reading and Commit Mono for anything you could type. All three are OFL and
+  served locally; their licenses sit next to the files in `lab/web/static/`.
 - **Screenshots:** made by `tools/web-screenshots.mjs`, which drives headless
   Chrome over the DevTools protocol with no npm packages.
 

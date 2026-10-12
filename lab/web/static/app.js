@@ -314,12 +314,12 @@ function showJobDialog(info) {
 // --- terminals ------------------------------------------------------------------------------------
 
 const TERM_THEME = {
-  background: "#0c0d0b", foreground: "#dedbd1", cursor: "#e8c547", cursorAccent: "#0c0d0b",
-  selectionBackground: "#e8c54750",
-  black: "#1f201d", red: "#e8695d", green: "#7fc797", yellow: "#e3c057", blue: "#82aee0",
-  magenta: "#c79be0", cyan: "#6cc4c0", white: "#d6d3c9",
-  brightBlack: "#5d5b54", brightRed: "#f2877c", brightGreen: "#9edcb1", brightYellow: "#f0d36f",
-  brightBlue: "#a3c6f0", brightMagenta: "#dab6ee", brightCyan: "#8fd8d4", brightWhite: "#f4f1e8",
+  background: "#030916", foreground: "#dfe8ff", cursor: "#5a8cff", cursorAccent: "#030916",
+  selectionBackground: "#326ce566",
+  black: "#0f1d3d", red: "#ff6b7f", green: "#4fdca8", yellow: "#ffcf6b", blue: "#5a8cff",
+  magenta: "#b99bff", cyan: "#5cd0f0", white: "#cfdaf5",
+  brightBlack: "#51658f", brightRed: "#ff8fa0", brightGreen: "#7beabf", brightYellow: "#ffdd94",
+  brightBlue: "#8fb0ff", brightMagenta: "#d0bcff", brightCyan: "#8fe0f6", brightWhite: "#ffffff",
 };
 
 const Terms = {
@@ -496,6 +496,53 @@ function gutter(doc, key) {
   return g;
 }
 
+// --- graphics ----------------------------------------------------------------------------------
+
+function svgEl(markup) {
+  const t = document.createElement("template");
+  t.innerHTML = markup.trim();
+  return t.content.firstElementChild;
+}
+
+const polar = (cx, cy, r, i, n, rot = -90) => {
+  const a = (rot + (360 / n) * i) * Math.PI / 180;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+};
+
+// A seven-sided wheel: the heptagon and seven spokes of the Kubernetes mark, simplified.
+function brandMark() {
+  const pts = [...Array(7)].map((_, i) => polar(16, 16, 15, i, 7).map(v => v.toFixed(2)).join(",")).join(" ");
+  const spokes = [...Array(7)].map((_, i) => {
+    const [x1, y1] = polar(16, 16, 4.6, i, 7), [x2, y2] = polar(16, 16, 10, i, 7);
+    return `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`;
+  }).join("");
+  return svgEl(`<svg viewBox="0 0 32 32" aria-hidden="true"><polygon points="${pts}" fill="#326ce5" stroke="#5a8cff" stroke-width=".8"/>
+    <g stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none"><circle cx="16" cy="16" r="4.6"/>${spokes}</g></svg>`);
+}
+
+// Coverage ring: one arc per exam domain, sized by its exam weight, filled by your progress.
+// The outer ticks are the 31 labs, lit when passed.
+function domainRing(domains, labs) {
+  const c = 125, r = 98, C = 2 * Math.PI * r, gap = 5;
+  let start = 0;
+  const arcs = domains.map((d, i) => {
+    const seg = C * d.weight / 100, len = Math.max(0, seg - gap);
+    const out = `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--line)" stroke-width="14" stroke-dasharray="${len} ${C}" stroke-dashoffset="${-start}"/>
+      <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--d${i + 1})" stroke-width="14" stroke-dasharray="${len * d.frac} ${C}" stroke-dashoffset="${-start}" style="filter: drop-shadow(0 0 6px var(--d${i + 1}))"/>`;
+    start += seg;
+    return out;
+  }).join("");
+  const ticks = labs.map((l, i) => {
+    const [x1, y1] = polar(c, c, 114, i, labs.length), [x2, y2] = polar(c, c, 121, i, labs.length);
+    const on = l.best === 1;
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${on ? "var(--k8s-hi)" : "var(--line-2)"}" stroke-width="2.4" stroke-linecap="round"${on ? ' style="filter: drop-shadow(0 0 4px var(--k8s-hi))"' : ""}/>`;
+  }).join("");
+  const hept = [...Array(7)].map((_, i) => polar(c, c, 80, i, 7).map(v => v.toFixed(1)).join(",")).join(" ");
+  return svgEl(`<svg viewBox="0 0 250 250" role="img" aria-label="Curriculum coverage by exam domain">
+    <polygon points="${hept}" fill="none" stroke="var(--line)" stroke-dasharray="3 5"/>
+    <g transform="rotate(-90 ${c} ${c})">${arcs}</g>${ticks}</svg>`);
+}
+
 // --- chrome ------------------------------------------------------------------------------------
 
 function theme(next) {
@@ -513,7 +560,7 @@ function theme(next) {
 
 function renderTop() {
   const top = h("header", { class: "top" },
-    h("a", { class: "brand", href: "#/", title: "Overview" }, h("i"), h("span", { class: "brand-text" }, "cka", h("b", {}, " / "), "lab")),
+    h("a", { class: "brand", href: "#/", title: "Overview" }, brandMark(), h("span", { class: "brand-text" }, "CKA", h("b", {}, "/"), "Lab")),
     h("nav", { class: "nav" },
       h("a", { href: "#/", "data-r": "labs" }, "Labs"),
       h("a", { href: "#/exams", "data-r": "exams" }, "Exams"),
@@ -547,6 +594,30 @@ function renderHealth() {
     }
   }
   el.replaceChildren(h("span", { class: "dot " + cls }), h("span", { class: "label" }, text));
+  renderClusterBits();
+}
+
+// Live cluster widgets on the dashboard (if it's showing).
+function renderClusterBits() {
+  const c = S.cluster, strip = $("#vm-strip"), tile = $("#tile-cluster");
+  if (strip && c) {
+    const byName = Object.fromEntries((c.nodes || []).map(n => [n.name, n]));
+    strip.replaceChildren(...c.vms.map(vm => {
+      const node = byName[vm.name];
+      const cls = vm.status !== "running" ? "bad" : node ? (node.ready ? "ok" : "bad") : vm.role === "node" && vm.name !== "nfs" && c.nodes ? "warn" : "ok";
+      return h("span", { class: "vm-led", title: `${vm.name}: VM ${vm.status || "unknown"}${node ? `, node ${node.ready ? "Ready" : "NotReady"}` : ""}` }, h("span", { class: "dot " + cls }), vm.name);
+    }));
+  }
+  if (tile && c) {
+    const nodes = c.nodes || [];
+    const ready = nodes.filter(n => n.ready).length;
+    const up = c.vms.filter(v => v.status === "running").length;
+    tile.replaceChildren(
+      h("div", { class: "label-sm" }, "Cluster"),
+      h("div", { class: "num" }, nodes.length ? ready : "—", nodes.length ? h("small", {}, ` / ${nodes.length}`) : null),
+      h("div", { class: "note" }, nodes.length ? `nodes Ready · ${nodes[0].version || ""}` : `no cluster yet · ${up}/${c.vms.length} VMs running`),
+      h("div", { class: "meter" }, h("i", { style: { width: `${nodes.length ? (ready / nodes.length) * 100 : 0}%` } })));
+  }
 }
 
 async function pollCluster(fresh = false) {
@@ -579,10 +650,12 @@ function showLogin() {
       } catch (x) { err.textContent = x.message; btn.disabled = false; pw.select(); }
     },
   },
-    h("a", { class: "brand", href: "#/" }, h("i"), "cka", h("b", {}, "/"), "lab"),
+    h("a", { class: "brand", href: "#/" }, brandMark(), h("span", { class: "brand-text" }, "CKA", h("b", {}, "/"), "Lab")),
     h("h1", {}, "Jump host console"),
     h("p", {}, "Labs, mock exams and a shell on the jump host, in the browser. Sign in with the student password."),
     h("label", { for: "pw" }, "Password"), pw, btn, err);
+  form.classList.add("hud");
+  form.querySelector("label").className = "label-sm";
   $("#app").replaceChildren(h("main", { class: "login" }, form));
   pw.focus();
 }
@@ -626,6 +699,11 @@ function scoreCell(lab) {
     lab.best === 1 ? "passed" : `${r.pass ?? "?"}/${r.total ?? "?"}`);
 }
 
+function domainChip(key) {
+  const i = DOMAINS.indexOf(domainOf(key));
+  return h("span", { class: "domain-chip" }, h("i", { style: { background: i < 0 ? "var(--muted)" : `var(--d${i + 1})` } }), shortDomain(key));
+}
+
 async function viewOverview(main, focus) {
   const data = await loadOverview();
   const labs = data.labs;
@@ -637,6 +715,8 @@ async function viewOverview(main, focus) {
   });
   const coverage = Math.round(perDomain.reduce((a, d) => a + d.weight * d.frac, 0));
   const examBest = Math.max(-1, ...data.exams.flatMap(e => e.history.map(x => x.score)));
+  const graded = labs.filter(l => l.result);
+  const checksPass = graded.reduce((a, l) => a + l.result.pass, 0), checksTotal = graded.reduce((a, l) => a + l.result.total, 0);
   const next = labs.find(l => !labPassed(l));
 
   let filter = store.get("labFilter", "all");
@@ -648,57 +728,72 @@ async function viewOverview(main, focus) {
     const shown = labs.filter(l => filter === "all" || (filter === "todo" ? !labPassed(l) : domainOf(l.domain).key === filter));
     tbody.replaceChildren(...shown.map(l => h("tr", { class: "row" + (labPassed(l) ? " done" : ""), onclick: () => { location.hash = `#/lab/${l.id}`; } },
       h("td", { class: "num" }, l.num),
-      h("td", {}, h("a", { class: "t", href: `#/lab/${l.id}`, style: { textDecoration: "none" } }, l.title),
+      h("td", {}, h("a", { class: "t", href: `#/lab/${l.id}` }, l.title),
         h("div", { class: "cur" }, l.curriculum.join(" · "))),
-      h("td", { class: "dom" }, shortDomain(l.domain)),
+      h("td", { class: "dom" }, domainChip(l.domain)),
       h("td", { class: "min" }, l.minutes ? `${l.minutes}m` : ""),
       h("td", { class: "st" }, scoreCell(l)),
       h("td", { class: "go" }, "→"))));
-    if (!shown.length) tbody.append(h("tr", {}, h("td", { colspan: 6, class: "muted" }, "Nothing here.")));
+    if (!shown.length) tbody.append(h("tr", {}, h("td", { colspan: 6, class: "muted", style: { padding: "20px" } }, "Nothing here.")));
   };
   drawRows();
 
   const examsSection = h("section", { id: "exams" },
     h("div", { class: "section-head" }, h("h2", {}, "Mock exams"), h("span", { class: "grow" }),
-      h("span", { class: "muted", style: { fontSize: "13px" } }, "120 minutes · weighted tasks · pass at 66 %")),
+      h("span", { class: "label-sm" }, "120 min · weighted · pass 66 %")),
     h("div", { class: "exam-rows" }, data.exams.map(e => {
       const running = e.deadline && !e.submitted_at && e.deadline * 1000 > Date.now();
-      return h("a", { class: "exam-row", href: `#/exam/${e.n}` },
+      return h("a", { class: "exam-row hud", href: `#/exam/${e.n}` },
         h("div", { class: "n" }, e.n),
         h("div", {},
           h("h3", {}, e.title.replace(/^CKA /, "")),
-          h("div", { class: "meta" }, `${e.tasks} tasks · ${e.minutes} min`),
+          h("div", { class: "meta" }, `${e.tasks} tasks · ${e.minutes} minutes · all five domains`),
           h("div", { class: "hist" },
             running ? h("span", { class: "tag mark" }, "in progress") : null,
             e.history.length ? e.history.slice(-5).map(x => h("span", { class: "tag " + (x.passed ? "pass" : "fail") }, `${x.score}%`))
-              : !running && h("span", { class: "muted", style: { fontSize: "13px" } }, "Not attempted"))));
+              : !running && h("span", { class: "tag" }, "not attempted"))),
+        h("span", { class: "go" }, "Open →"));
     })));
 
+  const wheel = brandMark();
+  wheel.classList.add("wheel-bg");
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("section", { class: "masthead" },
-      h("div", {},
-        h("h1", {}, "Kubernetes administration, from bare metal up."),
-        h("p", {}, "31 labs in curriculum order, then two timed mock exams. Everything runs on your HA cluster.")),
-      h("div", {}, h("div", { class: "stat-label" }, "Labs passed"),
-        h("div", { class: "stat" }, passed, h("small", {}, ` / ${labs.length}`)),
-        h("div", { class: "stat-note" }, `${labs.filter(l => l.started_at && !labPassed(l)).length} in progress`)),
-      h("div", {}, h("div", { class: "stat-label" }, "Curriculum covered"),
-        h("div", { class: "stat" }, coverage, h("small", {}, " %")),
-        h("div", { class: "stat-note" }, "weighted by exam domain")),
-      h("div", {}, h("div", { class: "stat-label" }, "Best mock exam"),
-        h("div", { class: "stat" }, examBest < 0 ? "—" : examBest, examBest < 0 ? "" : h("small", {}, " %")),
-        h("div", { class: "stat-note" }, examBest < 0 ? "not attempted yet" : examBest >= 66 ? "above the pass mark" : "below the 66 % pass mark"))),
-    h("div", { class: "domains" }, perDomain.map(d => h("div", { class: "domain-seg", style: { flexGrow: d.weight }, title: `${d.name}: ${d.weight}% of the exam` },
-      h("div", { class: "track" }, h("div", { class: "fill", style: { width: `${Math.round(d.frac * 100)}%` } })),
-      h("div", { class: "cap" }, h("span", {}, d.short || d.name), h("span", {}, `${d.weight}% · ${d.done}/${d.labs.length} labs`))))),
-    next ? h("div", { class: "next" },
-      h("div", { class: "what" }, h("span", { class: "muted" }, next.started_at ? "Pick up where you left off: " : "Next up: "),
-        h("b", {}, `Lab ${next.num}`), ` · ${next.title}`),
-      h("a", { class: "btn solid", href: `#/lab/${next.id}` }, next.started_at ? "Resume" : "Open lab")) : null,
+    h("section", { class: "hero" },
+      h("div", { class: "hero-main hud" }, h("div", { class: "wheel-clip" }, wheel),
+        h("div", { class: "label-sm blue" }, "CKA · Kubernetes v1.35 · 7-VM HA lab"),
+        h("h1", {}, "Certified Kubernetes ", h("em", {}, "Administrator")),
+        h("p", {}, "31 hands-on labs in curriculum order and two timed mock exams, graded live against a cluster you build yourself."),
+        h("div", { class: "vm-strip", id: "vm-strip" }),
+        next ? h("div", { class: "next" },
+          h("div", { class: "what" }, h("span", { class: "label-sm" }, next.started_at ? "Resume" : "Next up"),
+            h("span", { class: "t" }, `Lab ${next.num} · ${next.title}`)),
+          h("a", { class: "btn solid", href: `#/lab/${next.id}` }, next.started_at ? "Resume lab" : "Open lab")) : h("div", { class: "next" }, h("b", {}, "Every lab passed. Time for a mock exam."))),
+      h("div", { class: "ring-panel hud" },
+        h("div", { class: "head" }, h("span", { class: "label-sm" }, "Curriculum coverage"), h("span", { class: "label-sm blue" }, "by exam weight")),
+        h("div", { class: "ring" }, domainRing(perDomain, labs),
+          h("div", { class: "ring-center" }, h("b", {}, coverage, h("small", {}, "%")), h("span", {}, `${passed} of ${labs.length} labs`))),
+        h("div", { class: "legend" }, perDomain.map((d, i) => [
+          h("span", {}, h("span", { class: "sw", style: { background: `var(--d${i + 1})` } }), d.short || d.name),
+          h("span", { class: "n" }, `${d.done}/${d.labs.length}`),
+          h("span", { class: "n" }, `${d.weight}%`)])))),
+    h("section", { class: "tiles" },
+      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, "Labs passed"),
+        h("div", { class: "num" }, passed, h("small", {}, ` / ${labs.length}`)),
+        h("div", { class: "leds", title: "One cell per lab" }, labs.map(l => h("i", { class: labPassed(l) ? "on" : l.best ? "part" : "", title: `Lab ${l.num}` })))),
+      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, "Checks passing"),
+        h("div", { class: "num" }, checksTotal ? Math.round(checksPass * 100 / checksTotal) : "—", checksTotal ? h("small", {}, " %") : null),
+        h("div", { class: "note" }, checksTotal ? `${checksPass} of ${checksTotal} in ${graded.length} graded lab${graded.length === 1 ? "" : "s"}` : "no lab graded yet"),
+        h("div", { class: "meter" }, h("i", { style: { width: `${checksTotal ? (checksPass / checksTotal) * 100 : 0}%` } }))),
+      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, "Best mock exam"),
+        h("div", { class: "num", style: { color: examBest >= 66 ? "var(--pass)" : "" } }, examBest < 0 ? "—" : examBest, examBest < 0 ? null : h("small", {}, " %")),
+        h("div", { class: "note" }, examBest < 0 ? "not attempted yet" : examBest >= 66 ? "above the 66 % pass mark" : "pass mark is 66 %"),
+        h("div", { class: "meter" }, h("i", { style: { width: `${Math.max(0, examBest)}%` } }), h("span", { class: "mark", style: { left: "66%" }, title: "pass mark" }))),
+      h("div", { class: "tile hud", id: "tile-cluster" }, h("div", { class: "label-sm" }, "Cluster"), h("div", { class: "num" }, "…"))),
     h("section", { id: "labs" },
       h("div", { class: "section-head" }, h("h2", {}, "Labs"), h("span", { class: "grow" }), filters),
-      h("table", { class: "ledger" }, tbody)),
+      h("div", { class: "ledger-box hud" }, h("table", { class: "ledger" }, tbody))),
     examsSection)));
+  renderClusterBits();
   if (focus === "exams") examsSection.scrollIntoView();
 }
 
@@ -857,7 +952,7 @@ async function viewLab(main, id, tabName) {
 
   doc.append(
     h("div", { class: "doc-head" },
-      h("div", { class: "eyebrow" }, h("a", { href: "#/" }, "← labs"), h("span", {}, "/"), h("span", {}, `lab ${lab.num}`), h("span", {}, "·"), h("span", {}, shortDomain(lab.domain))),
+      h("div", { class: "eyebrow" }, h("a", { href: "#/" }, "← labs"), h("span", {}, "/"), h("span", { class: "id" }, `lab ${lab.num}`), h("span", {}, "·"), h("span", {}, shortDomain(lab.domain))),
       h("h1", {}, lab.title), facts, actions),
     tabsEl, body, drawer);
 
@@ -976,7 +1071,7 @@ async function viewExam(main, n, mode) {
 
   doc.append(
     h("div", { class: "doc-head" },
-      h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", {}, `mock exam ${n}`)),
+      h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
       h("div", { style: { display: "flex", alignItems: "center", gap: "14px", marginTop: "10px" } }, clockEl, h("span", { style: { flex: 1 } }),
         review ? h("a", { class: "btn", href: `#/exam/${n}` }, "Results")
           : h("button", { class: "btn solid", onclick: () => submit(false) }, "Hand in")),
@@ -1028,11 +1123,11 @@ function viewExamBriefing(main, exam) {
   busy();
   const off = Jobs.on(busy);
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", {}, `mock exam ${n}`)),
+    h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
     h("h1", { class: "page-title" }, exam.title.replace(/^CKA /, "")),
     h("div", { class: "briefing" },
-      h("div", {}, renderMarkdown(exam.readme)),
-      h("aside", { class: "side" },
+      h("div", { class: "hud" }, renderMarkdown(exam.readme)),
+      h("aside", { class: "side hud" },
         h("h3", {}, "Before you begin"),
         h("div", { class: "facts", style: { marginBottom: "10px" } },
           h("span", { class: "mono" }, `${exam.task_list.length} tasks`), h("span", { class: "mono" }, `${exam.minutes} min`), h("span", { class: "mono" }, `pass ${exam.pass_mark}%`)),
@@ -1065,8 +1160,8 @@ function viewExamResults(main, exam) {
   const drawer = jobDrawer({ filter: j => j.target === String(n), onEnd: () => route() });
   const busy = () => !!S.jobs.current;
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", {}, `mock exam ${n}`)),
-    h("section", { class: "masthead", style: { marginTop: "14px" } },
+    h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
+    h("section", { class: "masthead hud", style: { marginTop: "14px" } },
       h("div", {}, h("h1", {}, r ? (r.passed ? "Passed." : "Not this time.") : "Graded."),
         h("p", {}, r ? `Pass mark ${r.pass_mark}%. Graded ${ago(r.at)}. Click a task to see which checks failed.` : "")),
       h("div", {}, h("div", { class: "stat-label" }, "Score"), h("div", { class: "stat", style: { color: r && r.passed ? "var(--pass)" : "var(--fail)" } }, r ? r.score : "—", h("small", {}, " %"))),
@@ -1083,9 +1178,9 @@ function viewExamResults(main, exam) {
         },
       }, "Clean up"),
       h("a", { class: "btn", href: "#/cluster" }, `Reset to before-exam${n}…`)),
-    h("table", { class: "result-table" },
+    h("div", { class: "rack-box hud", style: { marginTop: "16px" } }, h("table", { class: "result-table" },
       h("thead", {}, h("tr", {}, h("th", {}, "#"), h("th", {}, "Task"), h("th", {}, "Domain"), h("th", { style: { textAlign: "right" } }, "Checks"), h("th", { style: { textAlign: "right" } }, "Weight"), h("th", { style: { textAlign: "right" } }, "Earned"))),
-      h("tbody", {}, rows)),
+      h("tbody", {}, rows))),
     drawer)));
   S.view = () => drawer.dispose();
 }
@@ -1174,15 +1269,15 @@ async function viewCluster(main) {
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
     h("div", { class: "section-head", style: { marginTop: 0 } }, h("h2", {}, "Machines"), h("span", { class: "grow" }),
       h("span", { class: "muted", style: { fontSize: "13px" } }, "Proxmox power state and Kubernetes node status, refreshed every 10 s")),
-    h("table", { class: "rack" },
-      h("thead", {}, h("tr", {}, ["VM", "ID", "Address", "Size", "Power", "Kubernetes"].map(t => h("th", {}, t)))), rack),
+    h("div", { class: "rack-box hud" }, h("table", { class: "rack" },
+      h("thead", {}, h("tr", {}, ["VM", "ID", "Address", "Size", "Power", "Kubernetes"].map(t => h("th", {}, t)))), rack)),
     h("div", { class: "section-head" }, h("h2", {}, "Snapshots")),
     h("div", { class: "callout" }, h("b", {}, "Snapshots are your undo button. "),
       "Take one before any lab that changes nodes or the control plane (01–08, 27, 28 and the mock exams). ",
       h("span", { class: "mono" }, "base"), " is bare Ubuntu: resetting to it starts the whole course over."),
     snapNote,
-    h("table", { class: "rack" },
-      h("thead", {}, h("tr", {}, ["Name", "Taken", "VMs", ""].map(t => h("th", {}, t)))), snaps),
+    h("div", { class: "rack-box hud" }, h("table", { class: "rack" },
+      h("thead", {}, h("tr", {}, ["Name", "Taken", "VMs", ""].map(t => h("th", {}, t)))), snaps)),
     h("div", { class: "inline-form" }, nameField, takeBtn),
     drawer,
     h("div", { class: "section-head" }, h("h2", {}, "Recent jobs")),
