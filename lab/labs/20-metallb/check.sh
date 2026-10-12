@@ -25,6 +25,7 @@ check_eq "web has 10.10.10.205" 10.10.10.205 ip web
 check_eq "curl http://10.10.10.205 from jump" "hello from lb" curl -s --max-time 5 http://10.10.10.205
 check "web-reserved got an address in 230-235" in_range "$(ip web-reserved)" 230 235
 check "web-auto got an address in 200-220" in_range "$(ip web-auto)" 200 220
-check "web-auto has no MetalLB annotations" bash -c \
-  "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n lb get svc web-auto -o json | jq -e '[.metadata.annotations // {} | keys[] | select(startswith(\"metallb.io/\"))] | length == 0'"
+check "web-auto asks for nothing (no loadBalancerIPs/address-pool annotations)" bash -c \
+  "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n lb get svc web-auto -o json | jq -e '.metadata.annotations // {} | (has(\"metallb.io/loadBalancerIPs\") or has(\"metallb.io/address-pool\")) | not'"
+check_eq "MetalLB allocated web-auto from lab-pool" lab-pool kcq -n lb get svc web-auto -o 'jsonpath={.metadata.annotations.metallb\.io/ip-allocated-from-pool}'
 finish

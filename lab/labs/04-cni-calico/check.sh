@@ -11,12 +11,7 @@ section "Helm"
 check_match "helm 3 on jump" '^v3\.' bash -c 'helm version --short'
 check "release calico deployed in tigera-operator" test -n "$rel"
 check_eq "chart tigera-operator v3.32.2" "tigera-operator v3.32.2" rq '"\(.chart.metadata.name) \(.chart.metadata.version)"'
-cfg_tmp=$(mktemp); trap 'rm -f "$cfg_tmp"' EXIT
-rq '.config // {}' >"$cfg_tmp"
-check "installed from ~/calico/values.yaml alone (release values == file, so no --set)" python3 -c '
-import sys, json, yaml
-want = json.load(open(sys.argv[1])); have = yaml.safe_load(open(sys.argv[2])) or {}
-sys.exit(0 if want and want == have else 1)' "$cfg_tmp" "$HOME/calico/values.yaml"
+check "installed from ~/calico/values.yaml alone (release values == file, so no --set)" release_values_match tigera-operator calico "$HOME/calico/values.yaml"
 
 check_eq "Calico CRDs at v3.32.2 (operator.tigera.io installations CRD present)" installations.operator.tigera.io \
   kcq get crd installations.operator.tigera.io -o 'jsonpath={.metadata.name}'

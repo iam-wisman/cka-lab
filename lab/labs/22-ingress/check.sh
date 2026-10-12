@@ -10,14 +10,12 @@ ing() { kcq -n shop get ingress shop -o json | jq -e "$1" >/dev/null; }
 
 section "controller"
 check_eq "chart traefik 41.7.1" "traefik 41.7.1" jq -r '"\(.chart.metadata.name) \(.chart.metadata.version)"' <<<"${t:-{\}}"
-check "installed from ~/helm/traefik.yaml alone" python3 -c '
-import sys, json, yaml
-want = json.loads(sys.argv[1]).get("config", {}); have = yaml.safe_load(open(sys.argv[2])) or {}
-sys.exit(0 if want and want == have else 1)' "${t:-{\}}" "$HOME/helm/traefik.yaml"
+check "installed from ~/helm/traefik.yaml alone" release_values_match traefik traefik "$HOME/helm/traefik.yaml"
 check_eq "2 replicas available" 2 kcq -n traefik get deploy traefik -o 'jsonpath={.status.availableReplicas}'
 check "IngressClass traefik exists and is not default" bash -c \
   "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG get ingressclass traefik -o json | jq -e '(.metadata.annotations[\"ingressclass.kubernetes.io/is-default-class\"] // \"false\") == \"false\"'"
 check_eq "Service traefik has 10.10.10.201" 10.10.10.201 kcq -n traefik get svc traefik -o 'jsonpath={.status.loadBalancer.ingress[0].ip}'
+check "strict Prefix matching enabled" bash -c "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n traefik get deploy traefik -o json | jq -e '[.spec.template.spec.containers[0].args[]] | any(test(\"strictPrefixMatching=true\"; \"i\"))'"
 check "Gateway API provider disabled" bash -c \
   "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n traefik get deploy traefik -o json | jq -e '[.spec.template.spec.containers[0].args[]] | (any(test(\"providers.kubernetesingress\"; \"i\"))) and (all(test(\"providers.kubernetesgateway\"; \"i\") | not))'"
 check_match "http://shop.cka.lab redirects permanently to https" '^(301|308) https://shop\.cka\.lab' \
@@ -27,7 +25,8 @@ section "Ingress shop"
 check "class traefik, host shop.cka.lab" ing '.spec.ingressClassName=="traefik" and any(.spec.rules[]; .host=="shop.cka.lab")'
 check "/api Prefix -> api" ing 'any(.spec.rules[].http.paths[]; .path=="/api" and .pathType=="Prefix" and .backend.service.name=="api")'
 check "/static Exact -> static" ing 'any(.spec.rules[].http.paths[]; .path=="/static" and .pathType=="Exact" and .backend.service.name=="static")'
-check "defaultBackend -> fallback" ing '.spec.defaultBackend.service.name=="fallback"'
+check "a catch-all / Prefix -> fallback rule for shop.cka.lab (any Ingress in shop)" bash -c \
+  "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n shop get ingress -o json | jq -e 'any(.items[].spec.rules[]?; .host==\"shop.cka.lab\" and any(.http.paths[]; .path==\"/\" and .pathType==\"Prefix\" and .backend.service.name==\"fallback\"))'"
 check "TLS shop.cka.lab -> Secret shop-tls" ing 'any(.spec.tls[]; (.hosts|index("shop.cka.lab")) and .secretName=="shop-tls")'
 check "cert requested through the Ingress (cert-manager.io/cluster-issuer: cka-ca)" ing '.metadata.annotations["cert-manager.io/cluster-issuer"]=="cka-ca"'
 check "no hand-written Certificate (it's owned by the Ingress)" bash -c \

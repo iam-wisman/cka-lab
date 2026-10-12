@@ -9,10 +9,7 @@ section "A: metrics-server"
 ms=$(helm_release kube-system metrics-server)
 check_eq "release metrics-server: chart metrics-server 3.14.0" "metrics-server 3.14.0" \
   jq -r '"\(.chart.metadata.name) \(.chart.metadata.version)"' <<<"${ms:-{\}}"
-check "installed from ~/helm/metrics-server.yaml alone" python3 -c '
-import sys, json, yaml
-want = json.loads(sys.argv[1]).get("config", {}); have = yaml.safe_load(open(sys.argv[2])) or {}
-sys.exit(0 if want and want == have else 1)' "${ms:-{\}}" "$HOME/helm/metrics-server.yaml"
+check "installed from ~/helm/metrics-server.yaml alone" release_values_match kube-system metrics-server "$HOME/helm/metrics-server.yaml"
 check_eq "2 replicas available" "2 2" kcq -n kube-system get deploy metrics-server -o 'jsonpath={.spec.replicas} {.status.availableReplicas}'
 check "replicas on different nodes" bash -c \
   "n=\$($GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n kube-system get pod -l app.kubernetes.io/name=metrics-server -o jsonpath='{.items[*].spec.nodeName}'); [[ \$(tr ' ' '\n' <<<\"\$n\" | sort -u | wc -l) == 2 ]]"

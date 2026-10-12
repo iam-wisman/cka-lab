@@ -98,3 +98,14 @@ s = max(items, key=lambda i: int(i["metadata"]["labels"].get("version", 0)))
 raw = base64.b64decode(base64.b64decode(s["data"]["release"]))
 print(gzip.decompress(raw).decode() if raw[:2] == b"\x1f\x8b" else raw.decode())'
 }
+
+# release_values_match <namespace> <release> <values-file>
+# True when the release's user-supplied values equal the file exactly (so the
+# student installed from that file alone, without --set). Streams the release
+# through stdin: a chart with CRDs can make it megabytes, too big for argv.
+release_values_match() {
+  helm_release "$1" "$2" | python3 -c 'import sys, json, yaml
+want = json.load(sys.stdin).get("config", {})
+have = yaml.safe_load(open(sys.argv[1])) or {}
+sys.exit(0 if want and want == have else 1)' "$3"
+}

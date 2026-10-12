@@ -22,12 +22,17 @@ its own name over HTTP.
    - it watches Ingress resources only (its Gateway API provider stays **off**;
      lab 23 uses a different controller)
    - plain HTTP on port 80 redirects **permanently** to HTTPS
+   - `pathType: Prefix` must match **whole path elements**, as the Ingress
+     specification defines it (`/api` matches `/api/x`, never `/apiv2`).
+     Traefik does not do this by default.
 
 2. **Ingress `shop`** in namespace `shop`, class `traefik`, host
    **`shop.cka.lab`**:
    - `/api` and everything under it → `api`
    - exactly `/static` (nothing below it) → `static`
-   - any request the rules don't match → `fallback`
+   - every other path on `shop.cka.lab` → `fallback`, with an explicit
+     catch-all rule (test it over HTTPS: controllers differ in how they serve
+     an Ingress-level `defaultBackend`, and in how they **order** rules)
    - TLS for `shop.cka.lab` with a certificate **issued automatically by
      cert-manager** from ClusterIssuer `cka-ca` into Secret `shop-tls`. Use the
      Ingress itself to ask for it; don't write a Certificate object.
