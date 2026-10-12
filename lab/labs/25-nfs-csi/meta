@@ -1,0 +1,5 @@
+TITLE="NFS server from a raw disk, the NFS CSI driver, dynamic provisioning"
+DOMAIN="Storage"
+CURRICULUM="Implement storage classes and dynamic volume provisioning; Understand extension interfaces (CSI)"
+NEEDS="05"
+TIME=60

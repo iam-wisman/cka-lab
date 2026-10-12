@@ -1,0 +1,5 @@
+TITLE="Gateway API with Envoy Gateway: HTTPS, canary, header routing, redirects, ReferenceGrant"
+DOMAIN="Network"
+CURRICULUM="Use the Gateway API to manage Ingress traffic; Use Helm and Kustomize to install cluster components"
+NEEDS="10 20"
+TIME=75

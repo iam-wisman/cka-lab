@@ -1,0 +1,5 @@
+TITLE="Metrics, previous logs, stdout vs stderr, and the kubelet's own log"
+DOMAIN="Trouble"
+CURRICULUM="Monitor cluster and application resource usage; Manage and evaluate container output streams; Troubleshoot cluster components"
+NEEDS="09"
+TIME=45

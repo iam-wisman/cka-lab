@@ -1,0 +1,5 @@
+TITLE="NetworkPolicy: default deny, DNS, AND vs OR selectors, ipBlock"
+DOMAIN="Network"
+CURRICULUM="Define and enforce Network Policies; Understand connectivity between Pods"
+NEEDS="04"
+TIME=60

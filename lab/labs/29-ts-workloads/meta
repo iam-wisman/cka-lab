@@ -1,0 +1,5 @@
+TITLE="Troubleshoot seven broken workloads"
+DOMAIN="Trouble"
+CURRICULUM="Troubleshoot clusters and nodes; Manage and evaluate container output streams; Monitor cluster and application resource usage"
+NEEDS="25"
+TIME=60

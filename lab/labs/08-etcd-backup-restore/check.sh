@@ -25,12 +25,14 @@ check "off-node copy ~/backups/ledger.db is identical" test -n "$local_sum" -a "
 check "the disaster was triggered (lab start 08 disaster)" test -s "$LAB_STATE/lab08-disaster"
 
 section "restore"
+# Every restore check is meaningless until the disaster has happened.
+after() { test -s "$LAB_STATE/lab08-disaster" && "$@"; }
 check_eq "ConfigMap ledger/accounts is the original object" "$(cat "$LAB_STATE/lab08-accounts-uid" 2>/dev/null)" \
-  kcq -n ledger get cm accounts -o 'jsonpath={.metadata.uid}'
+  after kcq -n ledger get cm accounts -o 'jsonpath={.metadata.uid}'
 check_eq "Secret ledger/signing-key is the original object" "$(cat "$LAB_STATE/lab08-secret-uid" 2>/dev/null)" \
-  kcq -n ledger get secret signing-key -o 'jsonpath={.metadata.uid}'
-check_eq "accounts data intact" "1520.40 88.00 40210.99" kcq -n ledger get cm accounts -o 'jsonpath={.data.alice} {.data.bob} {.data.carol}'
-check "ConfigMap ledger/journal restored" kc -n ledger get cm journal
+  after kcq -n ledger get secret signing-key -o 'jsonpath={.metadata.uid}'
+check_eq "accounts data intact" "1520.40 88.00 40210.99" after kcq -n ledger get cm accounts -o 'jsonpath={.data.alice} {.data.bob} {.data.carol}'
+check "ConfigMap ledger/journal restored" after kc -n ledger get cm journal
 check "namespace intruder is gone" bash -c "test -s $LAB_STATE/lab08-disaster && ! $GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG get ns intruder >/dev/null 2>&1"
 old_id=$(cat "$LAB_STATE/lab08-cluster-id" 2>/dev/null)
 new_id=$(etcd_json endpoint status | jq -r '.[0].Status.header.cluster_id' 2>/dev/null)

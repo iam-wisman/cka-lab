@@ -1,0 +1,5 @@
+TITLE="PV/PVC lifecycle: reclaim a Released PV, local PVs, RWOP, expansion, StatefulSet retention"
+DOMAIN="Storage"
+CURRICULUM="Manage persistent volumes and persistent volume claims; Configure volume types, access modes and reclaim policies"
+NEEDS="25"
+TIME=60

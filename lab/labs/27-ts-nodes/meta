@@ -1,0 +1,5 @@
+TITLE="Troubleshoot NotReady nodes (runtime, kubelet config, swap, kubeconfig)"
+DOMAIN="Trouble"
+CURRICULUM="Troubleshoot clusters and nodes; Troubleshoot cluster components"
+NEEDS="05"
+TIME=45

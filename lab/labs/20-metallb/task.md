@@ -1,0 +1,44 @@
+# Lab 20: LoadBalancer Services on bare metal with MetalLB (L2)
+
+**Domain:** Services & Networking (20%)
+**Curriculum:** Use ClusterIP, NodePort, LoadBalancer service types and endpoints
+**Suggested time:** 40 minutes · **Start with:** `lab start 20`
+
+## Context
+
+On a cloud, `type: LoadBalancer` gets an address from the provider. On bare
+metal nothing assigns one, and `EXTERNAL-IP` stays `<pending>` forever.
+MetalLB fills that gap: it allocates addresses from pools you define and
+answers ARP for them on the lab network.
+
+## Tasks
+
+1. Install MetalLB with Helm: chart **`metallb` 0.16.1** from
+   `https://metallb.github.io/metallb`, release `metallb`, namespace
+   **`metallb-system`**. The namespace must allow MetalLB's speaker to run
+   with the privileges it needs under Pod Security admission.
+
+2. Two address pools, both announced in **L2** mode:
+   - **`lab-pool`**: `10.10.10.200`–`10.10.10.220`, handed out automatically
+   - **`reserved`**: `10.10.10.230`–`10.10.10.235`, used **only** when a
+     Service explicitly asks for it
+
+3. In namespace `lb` (Deployment `web` exists, port 5678):
+   - Service **`web`**, type LoadBalancer, port 80, **exactly `10.10.10.205`**
+   - Service **`web-reserved`**, type LoadBalancer, port 80, any address
+     from the `reserved` pool
+   - `curl http://10.10.10.205` from `jump` answers `hello from lb`
+
+4. Prove auto-assignment skips `reserved`: Service **`web-auto`**
+   (LoadBalancer, port 80, no annotations) gets an address from `lab-pool`.
+
+## Grading
+
+```
+lab check 20
+```
+
+## Notes
+
+- Addresses 10.10.10.201–203 will be used by labs 22/23; don't pin them here.
+- MetalLB's custom resources live in `metallb.io/v1beta1`.

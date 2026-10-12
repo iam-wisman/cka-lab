@@ -1,0 +1,5 @@
+TITLE="CoreDNS: stub domains, custom records, pod DNS config, the custom cluster domain"
+DOMAIN="Network"
+CURRICULUM="Understand and use CoreDNS"
+NEEDS="05"
+TIME=45

@@ -5,7 +5,7 @@ source "$LAB_HOME/lib/common.sh"
 set -euo pipefail
 on worker1 bash -s <<'SH'
 set -e
-ctr -n k8s.io images pull -q docker.io/library/busybox:1.37 >/dev/null
+ctr -n k8s.io images pull docker.io/library/busybox:1.37 >/dev/null
 ctr -n k8s.io tasks kill -s KILL rogue >/dev/null 2>&1 || true
 sleep 1
 ctr -n k8s.io containers rm rogue >/dev/null 2>&1 || true

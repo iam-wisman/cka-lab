@@ -1,0 +1,5 @@
+TITLE="Ingress with Traefik: classes, path types, default backend, TLS via cert-manager"
+DOMAIN="Network"
+CURRICULUM="Know how to use Ingress controllers and Ingress resources; Use Helm and Kustomize to install cluster components"
+NEEDS="10 20"
+TIME=55

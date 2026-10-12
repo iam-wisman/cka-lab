@@ -1,0 +1,5 @@
+TITLE="Services: named ports, NodePort traffic policy, headless, selector-less, ExternalName"
+DOMAIN="Network"
+CURRICULUM="Use ClusterIP, NodePort, LoadBalancer service types and endpoints; Understand connectivity between Pods"
+NEEDS="05"
+TIME=50

@@ -1,0 +1,5 @@
+TITLE="Troubleshoot a degraded HA control plane"
+DOMAIN="Trouble"
+CURRICULUM="Troubleshoot cluster components; Manage and evaluate container output streams"
+NEEDS="05"
+TIME=45

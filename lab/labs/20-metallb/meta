@@ -1,0 +1,5 @@
+TITLE="LoadBalancer Services on bare metal with MetalLB (L2)"
+DOMAIN="Network"
+CURRICULUM="Use ClusterIP, NodePort, LoadBalancer service types and endpoints; Use Helm and Kustomize to install cluster components"
+NEEDS="05"
+TIME=40

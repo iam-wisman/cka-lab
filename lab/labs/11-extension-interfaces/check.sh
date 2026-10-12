@@ -37,7 +37,8 @@ check_ans apiserver_container_cp2 "${real_ctr:0:13}"
 check_ans apiserver_pod_sandbox_cp2 "${real_pod:0:13}"
 real_ipam=$(on cp1 bash -c 'f=$(ls /etc/cni/net.d/*.conflist /etc/cni/net.d/*.conf 2>/dev/null | sort | head -1); jq -r "[.plugins[]? | .ipam.type // empty][0]" "$f"')
 check_ans cni_ipam_plugin "$real_ipam"
-real_sock=$(on worker1 bash -c "awk -F': *' '/^containerRuntimeEndpoint:/{print \$2}' /var/lib/kubelet/config.yaml | tr -d '\"'")
+# sed, not awk -F': ': the value itself contains colons (unix:///...).
+real_sock=$(on worker1 sed -n 's/^containerRuntimeEndpoint: *//p' /var/lib/kubelet/config.yaml | tr -d '"')
 [[ -z $real_sock ]] && real_sock=$(on worker1 bash -c "grep -o -- '--container-runtime-endpoint=[^ \"]*' /var/lib/kubelet/kubeadm-flags.env | cut -d= -f2")
 check_ans cri_socket "$real_sock"
 real_csi=$(kcq get csidrivers -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | sort | paste -sd,)

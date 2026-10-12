@@ -30,7 +30,7 @@ check_eq "ingest: Running with critical-batch, priority 1000000" "Running critic
   kcq -n team-a get pod ingest -o 'jsonpath={.status.phase} {.spec.priorityClassName} {.spec.priority}'
 
 section "C: static pod"
-real=$(on worker1 bash -c "awk -F': *' '/^staticPodPath:/{print \$2}' /var/lib/kubelet/config.yaml")
+real=$(on worker1 sed -n 's/^staticPodPath: *//p' /var/lib/kubelet/config.yaml)
 check_eq "answers/18-static-path.txt" "${real:-<unreadable>}" bash -c "sed 's:/*$::' ~/answers/18-static-path.txt"
 check "a manifest for static-web in that directory on worker1" on worker1 bash -c "grep -lqs 'name: static-web' ${real:-/nonexistent}/*.yaml"
 check_eq "mirror pod default/static-web-worker1 Running" Running kcq get pod static-web-worker1 -o 'jsonpath={.status.phase}'
