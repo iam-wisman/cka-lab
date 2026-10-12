@@ -147,6 +147,32 @@ ssh -i ~/.ssh/cka-lab student@<jump-ip>
 lab list
 ```
 
+## Resetting and retrying
+
+There are two levels of reset.
+
+**1. Re-run a lab's setup** (fast, one namespace). For labs 12–26 and 29–31,
+`lab start <id>` deletes the lab's namespace and recreates its starting
+objects, so you can retry the tasks. It does **not** undo cluster-wide things
+you installed during the lab (Helm releases, StorageClasses, CoreDNS edits,
+node labels). Those stay, which is usually what you want when retrying.
+
+**2. Snapshots** (whole cluster, about 2–4 minutes). Labs 01–11, 27 and 28
+change the nodes or the control plane itself, so the only clean retry is a
+snapshot:
+
+```bash
+lab snapshot before-08     # take one BEFORE starting a risky lab
+# ... attempt the lab ...
+lab reset before-08        # roll every VM back; the jump host reboots, reconnect after ~1 min
+lab snapshots              # list them
+lab reset base             # start completely over: bare nodes, framework still installed
+```
+
+Suggested checkpoints: `cluster-ready` after lab 05, `upgraded` after lab 07,
+and one before each mock exam. `lab snapshot` briefly shuts the nodes down so
+all three etcd members are captured at the same moment.
+
 ## Repository layout
 
 ```
@@ -166,6 +192,10 @@ lab/
 
 Reference solutions (and the scripts that verify every lab) are kept in a
 separate private repository, so the labs stay useful as practice.
+
+## License
+
+[MIT](LICENSE)
 
 ## Versions
 
