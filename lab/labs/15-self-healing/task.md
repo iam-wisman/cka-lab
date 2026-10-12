@@ -29,7 +29,8 @@
      `/out/report.txt` in a shared `emptyDir`, then exits 0 after 5 seconds
    - native sidecar `uploader` (`busybox:1.37`) runs `sleep infinity`
    - the Job must reach **Complete** (with a classic sidecar it never would)
-   - no retries on failure; the Job object is deleted automatically **10 minutes** after it finishes
+   - no retries on failure; the Job object is deleted automatically **1 hour**
+     after it finishes (so grade within the hour)
 
 ## Grading
 

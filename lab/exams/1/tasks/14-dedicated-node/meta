@@ -1,3 +1,4 @@
 TITLE="Use the reserved node"
 DOMAIN="Workloads & Scheduling"
 WEIGHT=5
+DISRUPTIVE=1

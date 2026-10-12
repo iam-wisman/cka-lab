@@ -106,14 +106,20 @@ cmd_exam() {
     start)
       [[ -f $st/deadline ]] && (( $(date +%s) < $(<"$st/deadline") )) && die "exam $n is already running (lab exam $n status)"
       mkdir -p "$st"; rm -f "$st"/*
-      local t
-      for t in "$d"/tasks/*/; do
-        t=${t%/}
-        if [[ -x $t/setup.sh ]]; then
-          printf '%s preparing %s\n' "${c_blue}::${c_off}" "$(basename "$t")"
-          GRADE_ID=exam$n-$(basename "$t") bash "$t/setup.sh" >"$st/setup-$(basename "$t").log" 2>&1 \
-            || die "setup of $(basename "$t") failed, see $st/setup-$(basename "$t").log"
-        fi
+      local t pass
+      # Two passes: tasks that break nodes or control-plane components (meta
+      # DISRUPTIVE=1) are set up last, so they can't stall the other setups.
+      for pass in 0 1; do
+        for t in "$d"/tasks/*/; do
+          t=${t%/}
+          [[ $(meta "$t" DISRUPTIVE) == 1 ]] && (( pass == 0 )) && continue
+          [[ $(meta "$t" DISRUPTIVE) != 1 ]] && (( pass == 1 )) && continue
+          if [[ -x $t/setup.sh ]]; then
+            printf '%s preparing %s\n' "${c_blue}::${c_off}" "$(basename "$t")"
+            GRADE_ID=exam$n-$(basename "$t") bash "$t/setup.sh" >"$st/setup-$(basename "$t").log" 2>&1 \
+              || die "setup of $(basename "$t") failed, see $st/setup-$(basename "$t").log"
+          fi
+        done
       done
       echo $(( $(date +%s) + EXAM_MINUTES * 60 )) >"$st/deadline"
       info "Mock exam $n started: $EXAM_MINUTES minutes. Read it with: lab exam $n show"

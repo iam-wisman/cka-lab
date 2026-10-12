@@ -8,7 +8,7 @@ ans() { sed -n "s/^$1=//p" "$HOME/answers/24-dns.txt" 2>/dev/null | head -1 | se
 dnsip=$(kcq -n kube-system get svc kube-dns -o 'jsonpath={.spec.clusterIP}')
 
 section "Corefile"
-check "db.corp.internal -> 10.10.10.30 (stub domain)" resolves_to db.corp.internal 10.10.10.30
+check "db.corp.internal -> 10.10.10.30" resolves_to db.corp.internal 10.10.10.30
 check "corp.internal uses its own server block forwarding to 10.10.10.10" bash -c \
   "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n kube-system get cm coredns -o jsonpath='{.data.Corefile}' | grep -Pzo '(?s)corp\.internal(:53)?\s*\{[^}]*forward\s+\.\s+10\.10\.10\.10' >/dev/null"
 check "registry.cka.lab -> 10.10.10.10" resolves_to registry.cka.lab 10.10.10.10
@@ -25,8 +25,8 @@ check "dnsPolicy None" p '.spec.dnsPolicy=="None"'
 check "nameserver = cluster DNS IP" p ".spec.dnsConfig.nameservers==[\"$dnsip\"]"
 check "searches dns.svc.cka.local svc.cka.local cka.local" p '.spec.dnsConfig.searches==["dns.svc.cka.local","svc.cka.local","cka.local"]'
 check "ndots 2" p 'any(.spec.dnsConfig.options[]; .name=="ndots" and .value=="2")'
-check_eq "resolv.conf inside the pod matches" "nameserver $dnsip|search dns.svc.cka.local svc.cka.local cka.local|options ndots:2" \
-  bash -c "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n dns exec dns-tuned -- cat /etc/resolv.conf 2>/dev/null | grep -E '^(nameserver|search|options)' | paste -sd'|'"
+check_eq "resolv.conf inside the pod matches (any line order)" "nameserver $dnsip|options ndots:2|search dns.svc.cka.local svc.cka.local cka.local" \
+  bash -c "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n dns exec dns-tuned -- cat /etc/resolv.conf 2>/dev/null | grep -E '^(nameserver|search|options)' | sort | paste -sd'|'"
 
 section "answers"
 check_eq "cluster_dns_ip" "${dnsip:-?}" ans cluster_dns_ip

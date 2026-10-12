@@ -90,7 +90,7 @@ spec:
       containers:
         - name: batch
           image: python:3.13-alpine
-          command: [python3, -c, "import time; buf = bytearray(60 * 1024 * 1024); print('loaded 60MiB dataset', flush=True); time.sleep(10**9)"]
+          command: [python3, -c, "import time; buf = b'x' * (60 * 1024 * 1024); print('loaded 60MiB dataset', flush=True); time.sleep(10**9)"]
           resources:
             requests: {memory: 16Mi}
             limits: {memory: 32Mi}

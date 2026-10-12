@@ -1,3 +1,4 @@
 TITLE="worker1's kubelet won't start"
 DOMAIN="Troubleshooting"
 WEIGHT=8
+DISRUPTIVE=1

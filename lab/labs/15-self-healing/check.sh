@@ -31,9 +31,10 @@ check_match "kubectl logs -c shipper shows orders" 'order [0-9]+ processed' kc -
 
 section "4: Job report"
 job() { kcq -n heal get job report -o json | jq -e "$1" >/dev/null; }
+kc -n heal get job report >/dev/null 2>&1 || _say "  ${c_yellow}note${c_off} Job heal/report not found; if it finished over an hour ago its TTL removed it. Re-create it and grade again."
 check "uploader is a native sidecar" job 'any(.spec.template.spec.initContainers[]?; .name=="uploader" and .restartPolicy=="Always")'
 check "backoffLimit 0" job '.spec.backoffLimit==0'
-check "ttlSecondsAfterFinished 600" job '.spec.ttlSecondsAfterFinished==600'
+check "ttlSecondsAfterFinished 3600" job '.spec.ttlSecondsAfterFinished==3600'
 check "Job Complete" job 'any(.status.conditions[]?; .type=="Complete" and .status=="True")'
 check_match "report container wrote 'report done'" 'report done' bash -c \
   "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG -n heal get job report -o json | jq -r '.spec.template.spec.containers[0].command | join(\" \")'"

@@ -115,6 +115,11 @@ surfaced problems no amount of reading would have:
 | Host dropped off the network mid-build: Intel I219 (`e1000e`) "Detected Hardware Unit Hang" ×2159 under heavy image-pull traffic | Disabled TSO/GSO/GRO on the uplink persistently (`post-up ethtool -K`) |
 | During the HA upgrade a worker went **NotReady**: kubeadm API servers only use their *local* etcd, and HAProxy kept the kubelet's long-lived connection pinned to a backend marked DOWN | Added `on-marked-down shutdown-sessions` to the LB; now a lab 02 requirement |
 | Calico ≥ 3.31 ships its CRDs in a separate chart; following older docs fails | Lab 04 makes you follow the version-specific procedure |
+| Envoy Gateway's proxies never became ready: the controller's address is built with `cluster.local`, but this cluster's domain is `cka.local` | `kubernetesClusterDomain=cka.local`; lab 23 now hints at the trap |
+| Traefik treats `pathType: Prefix` as a string prefix (`/api` matched `/apiv2`), orders routers by rule length, and its default router didn't serve HTTPS | `strictPrefixMatching`, plus a separate low-priority catch-all Ingress |
+| OOM kills reported as `Reason: Error` (exit 137), not `OOMKilled`: the kernel charged the kill to the pod-level cgroup, which containerd 2.4 doesn't attribute to the container | Tasks grade exit code 137, and the solutions teach confirming with the node's `dmesg` |
+| Python's `bytearray(N)` never touched its pages, so "out of memory" workloads didn't reliably hit their limit | Allocate with `b"x" * N` |
+| Helm's release record for Traefik is 2 MB, too large to pass as an argument, so a grader crashed | Stream release data through stdin |
 | kubeadm packages no longer pull in `cri-tools`, so `crictl` was missing | Solution installs it explicitly |
 | The CSR-vetting script used `openssl req -ext`, which doesn't exist, so SAN checks silently passed everything | Parse `-text` output; the forged CSR in lab 05 now fails on SANs as well |
 | A grader split `containerRuntimeEndpoint: unix:///...` on `:` and compared `unix` to `unix` | `sed` instead of `awk -F:` |

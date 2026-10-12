@@ -64,3 +64,6 @@ Test with `curl --cacert ~/cka-root-ca.crt --resolve store.cka.lab:443:10.10.10.
   permission. What object grants it, and **where** does it live?
 - `kubectl get gateway,httproute -A` and the `status.parents[].conditions` of
   a route tell you whether, and why, it was accepted.
+- This cluster's DNS domain is **`cka.local`**, not `cluster.local`. Some
+  software assumes the default. If a Gateway is `Accepted` but never
+  `Programmed`, read the proxy's logs.

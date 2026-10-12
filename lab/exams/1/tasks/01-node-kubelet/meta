@@ -1,3 +1,4 @@
 TITLE="worker2 is NotReady"
 DOMAIN="Troubleshooting"
 WEIGHT=7
+DISRUPTIVE=1

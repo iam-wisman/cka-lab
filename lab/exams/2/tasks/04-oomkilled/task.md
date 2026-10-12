@@ -3,6 +3,7 @@
 ### etl keeps restarting
 
 Deployment `etl` in namespace `e2-t4` keeps restarting. Write the
-termination **reason** Kubernetes reports for the container's last restart to
-`/home/student/exam2/t4-reason.txt`, then fix the Deployment so it runs stably
-by setting its memory limit to **256Mi** (nothing else).
+**exit code** of the container's last terminated run to
+`/home/student/exam2/t4-exitcode.txt` (just the number), then fix the
+Deployment so it runs stably by setting its memory limit to **256Mi**
+(nothing else).

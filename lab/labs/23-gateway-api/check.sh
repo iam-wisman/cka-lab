@@ -11,6 +11,7 @@ route() { kcq -n "$1" get httproute "$2" -o json | jq -e "$3" >/dev/null; }
 
 section "controller and class"
 check_eq "chart gateway-helm v1.9.2" "gateway-helm v1.9.2" jq -r '"\(.chart.metadata.name) \(.chart.metadata.version)"' <<<"${eg:-{\}}"
+check_eq "controller told the cluster domain is cka.local" cka.local jq -r '.config.kubernetesClusterDomain // "cluster.local (default)"' <<<"${eg:-{\}}"
 check "GatewayClass eg -> Envoy Gateway, Accepted" bash -c \
   "$GRADER_KUBECTL --kubeconfig $GRADER_KUBECONFIG get gatewayclass eg -o json | jq -e '.spec.controllerName==\"gateway.envoyproxy.io/gatewayclass-controller\" and any(.status.conditions[]; .type==\"Accepted\" and .status==\"True\")'"
 check_eq "Certificate infra/store-gw-tls Ready" True kcq -n infra get certificate store-gw-tls -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'

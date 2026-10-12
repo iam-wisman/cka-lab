@@ -17,6 +17,6 @@ spec:
       containers:
         - name: etl
           image: python:3.13-alpine
-          command: [python3, -c, "import time; b = bytearray(120 * 1024 * 1024); print('batch loaded', flush=True); time.sleep(10**9)"]
+          command: [python3, -c, "import time; b = b'x' * (120 * 1024 * 1024); print('batch loaded', flush=True); time.sleep(10**9)"]
           resources: {limits: {memory: 64Mi}}
 Y
