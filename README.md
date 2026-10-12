@@ -143,13 +143,14 @@ How it's built:
   DOMPurify are vendored at pinned versions, so the console works without
   internet access.
 - **Design:** the Kubernetes palette, K8s blue `#326CE5` and white on deep navy
-  (a white-and-blue light theme follows your system setting). It has a blueprint
-  grid, HUD-style panel corners and the seven-sided wheel as a motif: in the logo
-  mark, the mock exam badges, and the coverage ring. Each arc of the ring is an
+  (a white-and-blue light theme follows your system setting). Shapes are soft:
+  rounded cards, pill buttons and glows rather than hard edges. The seven-sided
+  wheel is the logo mark, and the coverage ring shows progress: each arc is an
   exam domain sized by its weight and filled by your progress, and its 31 ticks
-  are the labs. Type is Tektur for display and numbers, Schibsted Grotesk for
-  reading and Commit Mono for anything you could type. All three are OFL and
-  served locally; their licenses sit next to the files in `lab/web/static/`.
+  are the labs. Type is Quicksand for display and numbers, Nunito for reading,
+  and Rec Mono Casual (Recursive fixed at its mono and casual settings) for
+  anything you could type. All three are OFL and served locally; their licenses
+  sit next to the files in `lab/web/static/`.
 - **Screenshots:** made by `tools/web-screenshots.mjs`, which drives headless
   Chrome over the DevTools protocol with no npm packages.
 

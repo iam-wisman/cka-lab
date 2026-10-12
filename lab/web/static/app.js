@@ -345,7 +345,7 @@ const Terms = {
   },
 
   async init() {
-    await Promise.all(["400", "700"].map(w => document.fonts.load(`${w} ${this.size}px "Commit Mono"`))).catch(() => {});
+    await Promise.all(["400", "700"].map(w => document.fonts.load(`${w} ${this.size}px "Rec Mono Casual"`))).catch(() => {});
     let list = await api("/terms");
     if (!list.length) list = [await api("/terms", { method: "POST", body: {} })];
     for (const t of list) this.add(t);
@@ -356,7 +356,7 @@ const Terms = {
     const el = h("div", { class: "xt hidden" });
     this.host.append(el);
     const term = new Terminal({
-      fontFamily: '"Commit Mono", ui-monospace, monospace', fontSize: this.size, lineHeight: 1.18,
+      fontFamily: '"Rec Mono Casual", ui-monospace, monospace', fontSize: this.size, lineHeight: 1.18,
       cursorBlink: true, cursorStyle: "bar", scrollback: 5000, allowProposedApi: true,
       theme: TERM_THEME, macOptionIsMeta: true, rightClickSelectsWord: true,
     });
@@ -511,24 +511,26 @@ const polar = (cx, cy, r, i, n, rot = -90) => {
 
 // A seven-sided wheel: the heptagon and seven spokes of the Kubernetes mark, simplified.
 function brandMark() {
-  const pts = [...Array(7)].map((_, i) => polar(16, 16, 15, i, 7).map(v => v.toFixed(2)).join(",")).join(" ");
+  const pts = [...Array(7)].map((_, i) => polar(16, 16, 13.6, i, 7).map(v => v.toFixed(2)).join(",")).join(" ");
   const spokes = [...Array(7)].map((_, i) => {
     const [x1, y1] = polar(16, 16, 4.6, i, 7), [x2, y2] = polar(16, 16, 10, i, 7);
     return `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`;
   }).join("");
-  return svgEl(`<svg viewBox="0 0 32 32" aria-hidden="true"><polygon points="${pts}" fill="#326ce5" stroke="#5a8cff" stroke-width=".8"/>
+  return svgEl(`<svg viewBox="0 0 32 32" aria-hidden="true"><polygon points="${pts}" fill="#326ce5" stroke="#326ce5" stroke-width="3.2" stroke-linejoin="round"/>
     <g stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none"><circle cx="16" cy="16" r="4.6"/>${spokes}</g></svg>`);
 }
 
 // Coverage ring: one arc per exam domain, sized by its exam weight, filled by your progress.
 // The outer ticks are the 31 labs, lit when passed.
 function domainRing(domains, labs) {
-  const c = 125, r = 98, C = 2 * Math.PI * r, gap = 5;
+  // Round caps stick out by half the stroke width, so each dash is drawn that much shorter.
+  const c = 125, r = 98, C = 2 * Math.PI * r, gap = 6, w = 12;
   let start = 0;
+  const arc = (len, color, extra = "") => `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-dasharray="${len.toFixed(2)} ${C}" stroke-dashoffset="${(-start - w / 2).toFixed(2)}"${extra}/>`;
   const arcs = domains.map((d, i) => {
-    const seg = C * d.weight / 100, len = Math.max(0, seg - gap);
-    const out = `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--line)" stroke-width="14" stroke-dasharray="${len} ${C}" stroke-dashoffset="${-start}"/>
-      <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--d${i + 1})" stroke-width="14" stroke-dasharray="${len * d.frac} ${C}" stroke-dashoffset="${-start}" style="filter: drop-shadow(0 0 6px var(--d${i + 1}))"/>`;
+    const seg = C * d.weight / 100, len = Math.max(0, seg - gap - w);
+    const out = arc(len, "var(--line)") +
+      (d.frac > 0 ? arc(len * d.frac, `var(--d${i + 1})`, ` style="filter: drop-shadow(0 0 6px var(--d${i + 1}))"`) : "");
     start += seg;
     return out;
   }).join("");
@@ -539,7 +541,7 @@ function domainRing(domains, labs) {
   }).join("");
   const hept = [...Array(7)].map((_, i) => polar(c, c, 80, i, 7).map(v => v.toFixed(1)).join(",")).join(" ");
   return svgEl(`<svg viewBox="0 0 250 250" role="img" aria-label="Curriculum coverage by exam domain">
-    <polygon points="${hept}" fill="none" stroke="var(--line)" stroke-dasharray="3 5"/>
+    <polygon points="${hept}" fill="none" stroke="var(--line)" stroke-width="1.2" stroke-linejoin="round" stroke-dasharray="1 6" stroke-linecap="round"/>
     <g transform="rotate(-90 ${c} ${c})">${arcs}</g>${ticks}</svg>`);
 }
 
@@ -746,7 +748,7 @@ async function viewOverview(main, focus) {
       return h("a", { class: "exam-row hud", href: `#/exam/${e.n}` },
         h("div", { class: "n" }, e.n),
         h("div", {},
-          h("h3", {}, e.title.replace(/^CKA /, "")),
+          h("h3", {}, e.title.replace(/^CKA m/, "M").replace(/^CKA /, "")),
           h("div", { class: "meta" }, `${e.tasks} tasks · ${e.minutes} minutes · all five domains`),
           h("div", { class: "hist" },
             running ? h("span", { class: "tag mark" }, "in progress") : null,
@@ -1124,7 +1126,7 @@ function viewExamBriefing(main, exam) {
   const off = Jobs.on(busy);
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
     h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
-    h("h1", { class: "page-title" }, exam.title.replace(/^CKA /, "")),
+    h("h1", { class: "page-title" }, exam.title.replace(/^CKA m/, "M").replace(/^CKA /, "")),
     h("div", { class: "briefing" },
       h("div", { class: "hud" }, renderMarkdown(exam.readme)),
       h("aside", { class: "side hud" },
