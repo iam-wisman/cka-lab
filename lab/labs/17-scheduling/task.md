@@ -43,3 +43,25 @@ lab check 17
 - `whenUnsatisfiable: DoNotSchedule` vs `ScheduleAnyway`.
 - Topology spread only counts nodes that the pod's node affinity and
   taints/tolerations allow (`nodeAffinityPolicy`, `nodeTaintsPolicy`).
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace sched
+kubectl taint node worker2 dedicated-              # the lab's dedicated-node taint
+kubectl label node worker1 disktype-
+```
+
+Leaving the taint makes later labs squeeze onto worker1. (Lab 18's setup
+removes it too, in case you forget.)
+
+## Restarting this lab
+
+```bash
+lab start 17
+```
+
+This deletes namespace `sched`, removes `disktype` from worker1 and re-taints worker2 and recreates the starting objects, so you get the
+original broken or empty state back.

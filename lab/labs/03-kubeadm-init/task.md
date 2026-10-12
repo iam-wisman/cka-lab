@@ -76,3 +76,36 @@ certificate on `cp1`, and your `~/.kube/config` on `jump`.
   its output).
 - Save the `kubeadm join` commands init prints. You'll regenerate them in lab
   05 anyway: the uploaded certificates expire after two hours.
+
+## Cleaning up
+
+After `lab check` passes:
+
+Nothing to remove: what you built here **is** the cluster every later lab
+uses. Take a snapshot instead so you can come back to this point:
+
+```bash
+lab snapshot after-03
+```
+
+**Keep:** `/root/kubeadm-config.yaml` on cp1, and `~/.kube/config` on jump.
+
+## Restarting this lab
+
+This lab changes the nodes themselves, so the only clean restart is a
+snapshot. Take one **before** you start:
+
+```bash
+lab snapshot before-03
+# ... attempt the lab ...
+lab reset before-03        # all VMs roll back; reconnect to jump after ~1 minute
+```
+
+If you didn't take one, undo the init by hand on cp1, then delete the old credentials on jump:
+
+```bash
+ssh cp1 'sudo kubeadm reset -f && sudo rm -rf /etc/cni/net.d $HOME/.kube'
+rm -f ~/.kube/config
+```
+
+`kubeadm reset` leaves nftables/iptables rules behind; reboot cp1 to clear them.

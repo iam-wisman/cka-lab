@@ -70,3 +70,29 @@ lab check 04
   uninstall cleanly or `lab reset`.
 - containerd decides which CNI config to load. `containerd config dump` shows
   the directories it uses.
+
+## Cleaning up
+
+After `lab check` passes:
+
+Remove only the answer file:
+
+```bash
+rm -f ~/answers/04-cni.txt
+```
+
+**Keep:** Helm and the `calico` release: pods have no network without it.
+
+## Restarting this lab
+
+Uninstall Calico, including the CRDs you applied separately, then start over:
+
+```bash
+helm uninstall calico -n tigera-operator
+kubectl delete installation default --ignore-not-found
+helm template calico-crds projectcalico/crd.projectcalico.org.v1 --version v3.32.2 | kubectl delete -f - --ignore-not-found
+kubectl delete namespace tigera-operator calico-system --ignore-not-found
+for n in cp1 cp2 cp3 worker1 worker2; do ssh $n 'sudo rm -f /etc/cni/net.d/*calico*'; done
+```
+
+Pods lose networking until you reinstall. A snapshot (`lab snapshot before-04`) is the faster route.

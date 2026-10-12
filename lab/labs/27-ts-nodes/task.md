@@ -32,3 +32,23 @@ lab check 27
 - When the kubelet keeps exiting, its log shows the reason in the last lines
   before each restart.
 - `kubeadm` is not the tool here. Think about files, services and the kernel.
+
+## Cleaning up
+
+After `lab check` passes:
+
+Nothing to remove: the fixed nodes are the end state. Check you didn't leave
+anything behind:
+
+```bash
+ssh worker2 'ls /swap2.img 2>/dev/null; grep swap /etc/fstab'      # no active swap entry
+```
+
+## Restarting this lab
+
+```bash
+lab start 27
+```
+
+This breaks worker1 and worker2 again, the same way, and re-records the
+Node objects' identities for the grader.

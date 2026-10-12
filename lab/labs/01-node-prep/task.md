@@ -73,3 +73,27 @@ persisted kernel settings, `/proc/swaps` and `/etc/fstab`.
   (`io.containerd.grpc.v1.cri` became `io.containerd.cri.v1.runtime` and
   `io.containerd.cri.v1.images`), so most older blog posts are wrong now.
 - Five nodes: consider doing one by hand, then scripting the rest.
+
+## Cleaning up
+
+After `lab check` passes:
+
+Nothing to remove: what you built here **is** the cluster every later lab
+uses. Take a snapshot instead so you can come back to this point:
+
+```bash
+lab snapshot after-01
+```
+
+## Restarting this lab
+
+This lab changes the nodes themselves, so the only clean restart is a
+snapshot. Take one **before** you start:
+
+```bash
+lab snapshot before-01
+# ... attempt the lab ...
+lab reset before-01        # all VMs roll back; reconnect to jump after ~1 minute
+```
+
+If you didn't take one, `lab reset base` returns all nodes to bare Ubuntu (the `lab` command stays installed).

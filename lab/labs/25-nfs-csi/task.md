@@ -58,3 +58,33 @@ In namespace `storage`:
 ```
 lab check 25
 ```
+
+## Cleaning up
+
+After `lab check` passes:
+
+Deleting the namespace deletes the PVC, but the StorageClass reclaim policy
+is **Retain**, so the PV (now `Released`) and its data on the NFS server
+stay. Remove both:
+
+```bash
+kubectl delete namespace storage
+kubectl get pv -o json | jq -r '.items[] | select(.status.phase=="Released" and .spec.claimRef.namespace=="storage") | .metadata.name' | xargs -r kubectl delete pv
+ssh nfs sudo rm -rf /srv/nfs/k8s/storage
+```
+
+**Keep:** The NFS server, the CSI driver and the `nfs-csi` StorageClass: labs 26 and 29 and the mock exams provision volumes from them.
+
+## Restarting this lab
+
+Parts C and D (StorageClass, PVC, writers): run the cleanup above, then
+`kubectl delete storageclass nfs-csi` and `lab start 25`.
+
+Parts A and B rebuild the NFS server from a raw disk and the driver. Redoing
+them wipes the disk and everything stored on it, including other labs'
+volumes, so use a snapshot:
+
+```bash
+lab snapshot before-25      # before starting
+lab reset before-25         # to start over
+```

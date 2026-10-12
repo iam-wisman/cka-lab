@@ -37,3 +37,21 @@ Write every answer to the file named, on `jump`.
 ```
 lab check 31
 ```
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace ts-obs
+rm -f ~/answers/31-*.txt
+```
+
+## Restarting this lab
+
+```bash
+lab start 31
+```
+
+This deletes namespace `ts-obs` and puts the broken manifest back on worker1 and recreates the starting objects, so you get the
+original broken or empty state back.

@@ -55,3 +55,21 @@ lab check 13
   produce different key layouts. Look at what each one gives you.
 - An immutable ConfigMap can't be edited, only deleted and recreated.
 - `subPath` mounts don't receive updates when the ConfigMap changes. Know why.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace config
+rm -rf ~/config
+```
+
+## Restarting this lab
+
+```bash
+lab start 13
+```
+
+This deletes namespace `config` and regenerates `~/config/` (with a new database password) and recreates the starting objects, so you get the
+original broken or empty state back.

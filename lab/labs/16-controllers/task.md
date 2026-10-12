@@ -35,3 +35,21 @@
 ```
 lab check 16
 ```
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace batch
+rm -f ~/answers/16-kv1-fqdn.txt
+```
+
+## Restarting this lab
+
+```bash
+lab start 16
+```
+
+This deletes namespace `batch` and recreates the starting objects, so you get the
+original broken or empty state back.

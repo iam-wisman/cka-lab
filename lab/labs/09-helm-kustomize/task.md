@@ -64,3 +64,26 @@ lab check 09
 - Selectors on a Deployment are immutable. If you apply a version that changes
   them, the apply fails, and you'll be deleting and recreating to recover.
 - `helm history` shows every revision. A rollback creates a new one.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete -k ~/kustomize/overlays/prod      # also deletes namespace prod (the overlay owns it)
+helm uninstall web -n apps
+rm -rf ~/kustomize ~/answers/09-helm-revision.txt
+```
+
+Leave namespace `apps` itself: lab 10 issues a certificate into it.
+
+**Keep:** The `metrics-server` release and `~/helm/metrics-server.yaml`: labs 14 and 31 and the mock exams need metrics.
+
+## Restarting this lab
+
+Run the cleanup above, then also remove metrics-server if you want to redo part A:
+
+```bash
+helm uninstall metrics-server -n kube-system
+lab start 09                # rewrites the Kustomize base in ~/kustomize/base
+```

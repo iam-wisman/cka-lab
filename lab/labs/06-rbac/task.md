@@ -83,3 +83,26 @@ The grader tests effective permissions with impersonation
 - The CSR expiry is a field in the CSR spec; you don't need a custom CA.
 - `kubectl auth whoami --kubeconfig ~/rbac/jane.kubeconfig` shows who the API
   server thinks you are.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace dev staging ci          # removes the Roles, RoleBindings, SA, Deployments, Secret
+kubectl delete clusterrolebinding auditors
+kubectl delete clusterrole cka-audit audit-nodes audit-storage
+kubectl delete csr jane --ignore-not-found
+rm -rf ~/rbac
+```
+
+## Restarting this lab
+
+Run the cleanup above, then:
+
+```bash
+lab start 06
+```
+
+This recreates namespaces `dev`, `staging` and `ci` with their starting
+objects (the Deployments and the `db-credentials` Secret).

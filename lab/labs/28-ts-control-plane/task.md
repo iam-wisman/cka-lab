@@ -40,3 +40,23 @@ lab check 28
 - The kubelet restarts static pods by itself after you save the manifest.
   Don't leave backup copies in `/etc/kubernetes/manifests/`: the kubelet runs
   **every** file there.
+
+## Cleaning up
+
+After `lab check` passes:
+
+Nothing to remove. Make sure no backup copies of manifests were left in the
+manifests directory: the kubelet would run them as extra pods.
+
+```bash
+for n in cp1 cp2 cp3; do ssh $n ls /etc/kubernetes/manifests/; done   # exactly 4 files each
+rm -f ~/answers/28-faults.txt
+```
+
+## Restarting this lab
+
+```bash
+lab start 28
+```
+
+This breaks one component on each control plane again, the same way.

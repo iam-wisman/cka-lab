@@ -44,3 +44,20 @@ lab check 15
   native sidecar (GA since v1.33).
 - startupProbe: Kubernetes waits `failureThreshold × periodSeconds` before
   giving up. Liveness and readiness probes don't run until it succeeds.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace heal
+```
+
+## Restarting this lab
+
+```bash
+lab start 15
+```
+
+This deletes namespace `heal` and recreates the starting objects, so you get the
+original broken or empty state back.

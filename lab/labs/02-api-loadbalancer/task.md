@@ -62,3 +62,25 @@ lab check 02
 - In production you'd run two load balancers with a floating VIP (keepalived)
   so the load balancer isn't a single point of failure. kubeadm's "Options for
   Software Load Balancing" document covers it; read it.
+
+## Cleaning up
+
+After `lab check` passes:
+
+Nothing to remove: what you built here **is** the cluster every later lab
+uses. Take a snapshot instead so you can come back to this point:
+
+```bash
+lab snapshot after-02
+```
+
+**Keep:** HAProxy on jump: every later lab reaches the API through it.
+
+## Restarting this lab
+
+HAProxy only lives on jump, so you can redo this lab without touching the nodes:
+
+```bash
+sudo systemctl disable --now haproxy
+sudo apt-get purge -y haproxy && sudo rm -rf /etc/haproxy
+```

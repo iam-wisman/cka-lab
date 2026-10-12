@@ -81,3 +81,32 @@ server to reject them.
 - `kubectl explain` works on your own CRD once its schema is published.
 - Write `x-kubernetes-*` and `default:` carefully: defaults only apply
   inside a structural schema.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace ops
+kubectl delete crd backups.ops.cka.lab          # deleting a CRD deletes every object of that kind
+kubectl -n apps delete certificate app-tls
+kubectl -n apps delete secret app-tls
+rm -f ~/answers/10-cert-manager-crds.txt
+```
+
+**Keep:** cert-manager, ClusterIssuers `selfsigned-bootstrap` and `cka-ca`, and Certificate/Secret `cert-manager/cka-root-ca`: labs 22 and 23 and the mock exams issue certificates from them.
+
+## Restarting this lab
+
+Part B: run the cleanup above, and you can redo it.
+
+Part A (cert-manager) can't be torn down cleanly once labs 22 and 23 depend
+on it. Uninstalling it and deleting its CRDs removes **every** Certificate and
+Issuer in the cluster. Only do it before lab 22, or use a snapshot:
+
+```bash
+kubectl delete clusterissuer cka-ca selfsigned-bootstrap
+kubectl -n cert-manager delete certificate cka-root-ca && kubectl -n cert-manager delete secret cka-root-ca
+helm uninstall cert-manager -n cert-manager
+kubectl delete crd -l app.kubernetes.io/instance=cert-manager      # CRDs are kept on uninstall
+```

@@ -42,3 +42,32 @@ Configure volume types, access modes and reclaim policies
 ```
 lab check 26
 ```
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace pv-lab
+kubectl delete pv archive-pv local-vol1 --ignore-not-found
+kubectl get pv -o json | jq -r '.items[] | select(.status.phase=="Released" and .spec.claimRef.namespace=="pv-lab") | .metadata.name' | xargs -r kubectl delete pv
+ssh nfs sudo rm -rf /srv/nfs/k8s/pv-lab
+kubectl delete storageclass local-storage
+ssh worker1 sudo rm -rf /mnt/disks/vol1
+ssh nfs sudo rm -rf /srv/nfs/k8s/archive
+```
+
+`archive-pv` and `local-vol1` are Retain PVs you created by hand, so they
+outlive their claims. The third command removes the dynamically provisioned
+ones (`exclusive`, `growing`, the StatefulSet's `data-ledger-*`).
+
+## Restarting this lab
+
+Run the cleanup above first (it removes the Retain volumes the setup can't), then:
+
+```bash
+lab start 26
+```
+
+This deletes namespace `pv-lab` and recreates the Released `archive-pv` with its data and recreates the starting objects, so you get the
+original broken or empty state back.

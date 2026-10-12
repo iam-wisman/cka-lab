@@ -56,3 +56,20 @@ forbidden ones must time out.
   Service still works, because Calico evaluates the policy after the Service
   IP is translated to a pod IP.
 - `kubernetes.io/metadata.name` is a label every namespace has automatically.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace frontend backend db monitoring
+```
+
+## Restarting this lab
+
+```bash
+lab start 21
+```
+
+This deletes namespaces `frontend`, `backend`, `db` and `monitoring` (and every policy in them) and recreates the starting objects, so you get the
+original broken or empty state back.

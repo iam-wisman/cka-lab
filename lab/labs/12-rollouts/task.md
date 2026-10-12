@@ -44,3 +44,21 @@ lab check 12
   template back.
 - `kubectl annotate ... kubernetes.io/change-cause=... --overwrite` sets the
   change-cause that history shows. (`--record` is gone.)
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace rollout
+rm -f ~/answers/12-bad-revision.txt
+```
+
+## Restarting this lab
+
+```bash
+lab start 12
+```
+
+This deletes namespace `rollout` and recreates the starting objects, so you get the
+original broken or empty state back.

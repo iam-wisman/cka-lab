@@ -60,3 +60,26 @@ lab check 07
 - Each pkgs.k8s.io channel holds one minor version (lab 01).
 - After the kubelet restarts with a new version it may request a new
   serving certificate (lab 03/05).
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace uptime
+```
+
+**Keep:** The upgrade itself: all later labs and the mock exams assume v1.35.9.
+
+## Restarting this lab
+
+This lab changes the nodes themselves, so the only clean restart is a
+snapshot. Take one **before** you start:
+
+```bash
+lab snapshot before-07
+# ... attempt the lab ...
+lab reset before-07        # all VMs roll back; reconnect to jump after ~1 minute
+```
+
+If you didn't take one, there is no supported downgrade: `lab reset cluster-ready` (from lab 05) is the way back to v1.34.12.

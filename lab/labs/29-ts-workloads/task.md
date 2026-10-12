@@ -34,3 +34,24 @@ lab check 29
 - `kubectl get pods` → STATUS tells you the category; `kubectl describe pod`
   (events) and `kubectl logs --previous` tell you the cause.
 - Some fields are immutable. You may have to delete and recreate an object.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace ts-apps
+kubectl get pv -o json | jq -r '.items[] | select(.status.phase=="Released" and .spec.claimRef.namespace=="ts-apps") | .metadata.name' | xargs -r kubectl delete pv
+ssh nfs sudo rm -rf /srv/nfs/k8s/ts-apps
+```
+
+## Restarting this lab
+
+Run the cleanup above first (it removes the Retain volume left by `db-data`), then:
+
+```bash
+lab start 29
+```
+
+This deletes namespace `ts-apps` and recreates the starting objects, so you get the
+original broken or empty state back.

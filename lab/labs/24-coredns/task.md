@@ -51,3 +51,28 @@ lab check 24
   everything else on. Without that, it returns NXDOMAIN for the rest of its zone.
 - `kubeadm upgrade` rewrites the CoreDNS ConfigMap only when it can migrate
   it safely; keep your edits minimal and valid.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace dns
+rm -f ~/answers/24-dns.txt
+```
+
+The Corefile changes (the `corp.internal` stub and the `registry.cka.lab`
+hosts entry) are harmless to keep. To remove them, edit the `coredns`
+ConfigMap; the `reload` plugin applies it within a minute or two.
+
+## Restarting this lab
+
+```bash
+lab start 24
+```
+
+This deletes namespace `dns` and recreates the starting objects, so you get the
+original broken or empty state back.
+
+Your Corefile edits stay. To redo them, take them out of the `coredns`
+ConfigMap first (`kubectl -n kube-system edit cm coredns`).

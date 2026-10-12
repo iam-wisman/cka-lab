@@ -43,3 +43,27 @@
 ```
 lab check 18
 ```
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace team-a
+kubectl delete priorityclass critical-batch best-effort-batch
+ssh worker1 sudo rm /etc/kubernetes/manifests/static-web.yaml   # the mirror pod disappears with it
+rm -f ~/answers/18-static-path.txt
+```
+
+## Restarting this lab
+
+```bash
+lab start 18
+```
+
+This deletes namespace `team-a` and the static pod manifest on worker1 and recreates the starting objects, so you get the
+original broken or empty state back. The PriorityClasses are cluster-wide; delete them too if you want to recreate them yourself:
+
+```bash
+kubectl delete priorityclass critical-batch best-effort-batch
+```

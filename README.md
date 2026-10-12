@@ -149,7 +149,10 @@ lab list
 
 ## Resetting and retrying
 
-There are two levels of reset.
+Every lab's `task.md` ends with two sections: **Cleaning up** (what to remove
+after you pass, and what to keep because later labs need it) and **Restarting
+this lab** (the exact way to get back to its starting state). The mock exam
+READMEs have the same. In general there are two levels of reset.
 
 **1. Re-run a lab's setup** (fast, one namespace). For labs 12–26 and 29–31,
 `lab start <id>` deletes the lab's namespace and recreates its starting

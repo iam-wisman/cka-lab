@@ -57,3 +57,25 @@ lab check 11
   config, then read the "Registry Configuration" document in the containerd repo.
 - Where does the kubelet read its runtime endpoint from? Look at its config
   file, not just its command line.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete pod rc-test
+kubectl delete runtimeclass runc-std
+rm -f ~/answers/11-interfaces.txt
+```
+
+The docker.io mirror on worker2 is harmless to keep. To remove it, delete
+`/etc/containerd/certs.d/docker.io/` on worker2 and restart containerd.
+
+## Restarting this lab
+
+Run the cleanup above, undo the mirror on worker2, then plant the rogue container again:
+
+```bash
+ssh worker2 "sudo rm -rf /etc/containerd/certs.d/docker.io && sudo sed -i \"s#config_path = '/etc/containerd/certs.d'#config_path = ''#\" /etc/containerd/config.toml && sudo systemctl restart containerd"
+lab start 11
+```

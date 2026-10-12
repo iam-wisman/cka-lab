@@ -39,3 +39,20 @@ lab check 19
 
 - How does a Service find the EndpointSlices that belong to it? (One label.)
 - `externalTrafficPolicy` has two values; one of them preserves source IPs.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace svc
+```
+
+## Restarting this lab
+
+```bash
+lab start 19
+```
+
+This deletes namespace `svc` and recreates the starting objects, so you get the
+original broken or empty state back.

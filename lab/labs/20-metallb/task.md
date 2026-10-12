@@ -42,3 +42,30 @@ lab check 20
 
 - Addresses 10.10.10.201–203 will be used by labs 22/23; don't pin them here.
 - MetalLB's custom resources live in `metallb.io/v1beta1`.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace lb          # releases 10.10.10.205 and the other addresses
+```
+
+**Keep:** MetalLB, its pools and the L2Advertisement: Traefik (lab 22) and the Gateway (lab 23) get their addresses from it.
+
+## Restarting this lab
+
+```bash
+lab start 20
+```
+
+This deletes namespace `lb` and recreates the starting objects, so you get the
+original broken or empty state back.
+
+To redo the MetalLB **installation** as well (Traefik and the Gateway lose
+their addresses until you reinstall):
+
+```bash
+helm uninstall metallb -n metallb-system
+kubectl delete namespace metallb-system
+```

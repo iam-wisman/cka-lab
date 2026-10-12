@@ -44,3 +44,20 @@ lab check 14
 
 - `kubectl describe hpa` explains why metrics are missing.
 - Resizing uses a dedicated subresource. Editing the pod spec the normal way is rejected.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace scale
+```
+
+## Restarting this lab
+
+```bash
+lab start 14
+```
+
+This deletes namespace `scale` and recreates the starting objects, so you get the
+original broken or empty state back.

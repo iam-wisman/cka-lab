@@ -59,3 +59,43 @@ lab check 08
   out of `/etc/kubernetes/manifests/`.
 - After a restore, restart kube-controller-manager, kube-scheduler and the
   kubelets so they don't act on stale cached state.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace ledger
+rm -rf ~/backups
+```
+
+Optional: each control plane still has its **old**, now unused etcd data in
+`/var/lib/etcd`. Only remove it after confirming the manifest points at the
+restored directory, or you'll delete the live database:
+
+```bash
+for n in cp1 cp2 cp3; do
+  ssh $n "sudo grep -q 'path: /var/lib/etcd-from-backup' /etc/kubernetes/manifests/etcd.yaml && sudo rm -rf /var/lib/etcd && echo $n: removed old /var/lib/etcd"
+done
+```
+
+**Keep:** `etcdctl`/`etcdutl` in `/usr/local/bin` on cp1 (mock exam 1 uses them), and `/var/backups/etcd/ledger.db`.
+
+## Restarting this lab
+
+**After a successful restore** you can repeat the whole exercise:
+
+```bash
+lab start 08                # (re)creates namespace ledger and records its object IDs
+# back up again, then: lab start 08 disaster, then restore
+```
+
+The restore procedure stops etcd on all three control planes first, so at that
+point you can delete and recreate `/var/lib/etcd-from-backup` on each node.
+
+**After a failed restore** (etcd won't form quorum, API servers down), reset
+to the snapshot the lab told you to take:
+
+```bash
+lab reset before-08
+```

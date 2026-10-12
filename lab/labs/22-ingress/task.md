@@ -59,3 +59,29 @@ lab check 22
 - An Ingress with no `ingressClassName` is picked up only by the default class.
 - Read `helm show values traefik/traefik --version 41.7.1` for `ingressClass`,
   `providers`, `service` and `ports`.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace shop
+```
+
+**Keep:** The Traefik release (mock exam 2 publishes through it) and `~/cka-root-ca.crt`.
+
+## Restarting this lab
+
+```bash
+lab start 22
+```
+
+This deletes namespace `shop` and recreates the starting objects, so you get the
+original broken or empty state back.
+
+To redo the Traefik **installation** too:
+
+```bash
+helm uninstall traefik -n traefik
+kubectl delete namespace traefik
+```

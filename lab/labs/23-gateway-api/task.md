@@ -67,3 +67,32 @@ Test with `curl --cacert ~/cka-root-ca.crt --resolve store.cka.lab:443:10.10.10.
 - This cluster's DNS domain is **`cka.local`**, not `cluster.local`. Some
   software assumes the default. If a Gateway is `Accepted` but never
   `Programmed`, read the proxy's logs.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace store legacy rogue
+```
+
+**Keep:** Envoy Gateway, GatewayClass `eg`, and Gateway `infra/cka-gw` with Certificate `store-gw-tls`: mock exam 1 attaches a route to it.
+
+## Restarting this lab
+
+```bash
+lab start 23
+```
+
+This deletes namespaces `store`, `legacy` and `rogue` and recreates the starting objects, so you get the
+original broken or empty state back. Then run `lab start 23 rogue` again
+after your Gateway exists.
+
+To redo the Gateway and controller too:
+
+```bash
+kubectl -n infra delete gateway cka-gw
+kubectl -n infra delete certificate store-gw-tls
+kubectl delete gatewayclass eg
+helm uninstall eg -n envoy-gateway-system      # the Gateway API CRDs stay installed
+```

@@ -39,3 +39,22 @@ lab check 30
 - Work outward from the client: name resolution → Service → EndpointSlices → pod port → policy.
 - `kubectl get endpointslices -l kubernetes.io/service-name=<svc>` is the
   fastest way to see whether a Service found any pods.
+
+## Cleaning up
+
+After `lab check` passes:
+
+```bash
+kubectl delete namespace ts-net
+```
+
+**Keep:** The CoreDNS fix (zone `cka.local`): every name in the cluster depends on it.
+
+## Restarting this lab
+
+```bash
+lab start 30
+```
+
+This deletes namespace `ts-net` and breaks the CoreDNS zone again and recreates the starting objects, so you get the
+original broken or empty state back.

@@ -67,3 +67,30 @@ lab check 05
   and stop the API server container on `cp1` (or power `cp1` off from
   Proxmox), then confirm `kubectl get nodes` still works from `jump`.
   Restore afterwards.
+
+## Cleaning up
+
+After `lab check` passes:
+
+Approved and denied CSRs are garbage-collected by the cluster after an hour. Nothing else to remove. Take the snapshot the lab asks for, if you haven't:
+
+```bash
+lab snapshot cluster-ready
+```
+
+**Keep:** Everything. This is the cluster every later lab builds on.
+
+## Restarting this lab
+
+This lab changes the nodes themselves, so the only clean restart is a
+snapshot. Take one **before** you start:
+
+```bash
+lab snapshot before-05
+# ... attempt the lab ...
+lab reset before-05        # all VMs roll back; reconnect to jump after ~1 minute
+```
+
+If you didn't take one, `lab reset` to a snapshot from after lab 04 (e.g. `after-04`), or rebuild from lab 01. Un-joining nodes by hand (`kubeadm reset` on each, `kubectl delete node`, `etcdctl member remove`) is possible but easy to get wrong.
+
+The forged CSR comes back with `lab start 05`.
