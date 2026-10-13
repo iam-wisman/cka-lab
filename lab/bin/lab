@@ -17,11 +17,15 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
   lab list                      labs with status and last score
   lab show <id>                 print a lab's tasks
   lab start <id> [phase]        prepare the cluster for a lab (runs its setup; some labs have phases)
+  lab up <id> [phase]           spin a lab up on demand: build any missing prerequisite labs
+                                with the reference solutions (output hidden), then start it
   lab check <id>                grade a lab
   lab solution <id>             show the worked solution (after you've tried!)
   lab cleanup <id> [--yes]      remove what a finished lab left behind (keeps what later labs need)
 
   lab exam <n> start            begin mock exam <n>: sets up all tasks, 120 min timer
+  lab exam <n> prep             build the labs the exam assumes, if missing (as lab up does)
+  lab exam <n> up               prep, then start
   lab exam <n> show [task]      print the exam paper, or one task
   lab exam <n> check            grade the exam (weighted, pass mark ${EXAM_PASS}%)
   lab exam <n> status           time remaining
@@ -61,6 +65,7 @@ cmd_list() {
       score=$(jq -r '"\(.pass)/\(.total)"' "$res")
       [[ $(jq -r '.pass == .total' "$res") == true ]] && score="${c_green}${score} done${c_off}" || score="${c_yellow}${score}${c_off}"
     elif [[ -f $LAB_STATE/started/$id ]]; then score="${c_dim}started${c_off}"
+    elif [[ -f $LAB_STATE/provisioned/$id ]]; then score="${c_dim}built by lab up${c_off}"
     else score="${c_dim}-${c_off}"; fi
     printf "%-26s %-8s %-52s %s\n" "$id" "$domain" "${title:0:52}" "$score"
   done
@@ -74,7 +79,7 @@ cmd_show() {
 cmd_start() {
   local d id; d=$(lab_dir "$1"); id=$(basename "$d"); shift
   local needs; needs=$(meta "$d" NEEDS)
-  [[ -n $needs ]] && info "This lab assumes these are done: $needs"
+  [[ -n $needs ]] && info "This lab assumes these are done: $needs (lab up $id builds them)"
   if [[ -x $d/setup.sh ]]; then
     info "Preparing $id ..."
     GRADE_ID=$id bash "$d/setup.sh" "$@" || die "setup failed; fix the cluster (or lab reset) and retry"
@@ -96,6 +101,81 @@ cmd_solution() {
   read -rp "Show the solution for $id? Struggling first is where the learning happens. [y/N] " ok
   [[ $ok == y ]] || exit 0
   if command -v glow >/dev/null; then glow -p "$f"; else less -FRX "$f"; fi
+}
+
+# --- spin up on demand ----------------------------------------------------------
+#
+# Any lab can be started on a fresh cluster: its prerequisites (meta NEEDS, followed
+# transitively) are built with the private reference solutions, exactly as the
+# verified 01 -> 31 chain does it (start, solve, grade at 100%, cleanup). The solve
+# output goes to a log so nothing about those labs is spoiled on screen.
+
+# closure <ids...>: every lab these need, themselves included, highest first.
+closure() {
+  local seen=" " queue=("$@") n
+  while (( ${#queue[@]} )); do
+    n=$(basename "$(lab_dir "${queue[0]}")"); n=${n%%-*}; queue=("${queue[@]:1}")
+    [[ $seen == *" $n "* ]] && continue
+    seen+="$n "
+    queue+=($(meta "$(lab_dir "$n")" NEEDS))
+  done
+  tr ' ' '\n' <<<"$seen" | grep . | sort -rn
+}
+
+# done_already <lab dir>: passed before, built by `lab up`, or its grader passes now.
+done_already() {
+  local id; id=$(basename "$1")
+  [[ -f $LAB_STATE/provisioned/$id ]] && return 0
+  [[ -f $LAB_STATE/results/$id.json && $(jq -r '.pass == .total' "$LAB_STATE/results/$id.json") == true ]] && return 0
+  GRADE_PROBE=1 GRADE_QUIET=1 GRADE_ID=$id timeout 300 bash "$1/check.sh" </dev/null >/dev/null 2>&1
+}
+
+# provision <ids...>: make sure every lab in the closure of <ids> is done.
+provision() {
+  local all ok=" " todo=() n d id t0 log
+  all=$(closure "$@")
+  [[ -z $all ]] && return 0
+  [[ -d $LAB_SOLUTIONS/labs ]] || die "spinning up needs the reference solutions in $LAB_SOLUTIONS (infra/install-lab.sh --solutions <dir>)"
+  info "Prerequisites: $(sort -n <<<"$all" | xargs)"
+  # Highest first: a lab that's done vouches for everything it needed, so an early
+  # lab is never re-run on a cluster that has moved past it (e.g. upgraded by 07).
+  for n in $all; do
+    [[ $ok == *" $n "* ]] && continue
+    d=$(lab_dir "$n")
+    if done_already "$d"; then
+      printf '   %s %s\n' "${c_green}done${c_off}" "$(basename "$d")"
+      ok+="$(closure "$n" | xargs) "
+    else
+      todo=("$n" "${todo[@]}")
+    fi
+  done
+  (( ${#todo[@]} )) || { info "Everything this needs is in place"; return 0; }
+  info "Building ${#todo[@]} lab(s) with the reference solutions; this can take a while"
+  mkdir -p "$LAB_STATE/provisioned" "$LAB_STATE/up"
+  for n in $(printf '%s\n' "${todo[@]}" | sort -n); do
+    d=$(lab_dir "$n"); id=$(basename "$d"); t0=$SECONDS
+    log=$LAB_STATE/up/$id.log
+    [[ -f $LAB_SOLUTIONS/labs/$id/solve.sh ]] || die "no reference solution for $id"
+    printf '   %s %s: %s ... ' "${c_blue}build${c_off}" "$id" "$(meta "$d" TITLE)"
+    # (No set -e here: bash ignores it in a command whose status is tested.)
+    {
+      echo "== $(date -u +%FT%TZ) setup" &&
+      { [[ ! -x $d/setup.sh ]] || GRADE_ID=$id bash "$d/setup.sh"; } &&
+      echo "== $(date -u +%FT%TZ) solve" &&
+      bash "$LAB_SOLUTIONS/labs/$id/solve.sh"
+    } </dev/null >"$log" 2>&1 || { echo "${c_red}failed${c_off}"; die "building $id failed (log: $log). Fix it, or lab reset base, and retry"; }
+    GRADE_PROBE=1 GRADE_QUIET=1 GRADE_ID=$id bash "$d/check.sh" </dev/null >>"$log" 2>&1 \
+      || { echo "${c_red}failed${c_off}"; die "$id didn't grade 100% after its reference solution (log: $log)"; }
+    [[ -f $d/cleanup.sh ]] && bash "$d/cleanup.sh" </dev/null >>"$log" 2>&1
+    date -u +%FT%TZ >"$LAB_STATE/provisioned/$id"
+    echo "${c_green}ok${c_off} ${c_dim}$(( (SECONDS - t0) / 60 ))m$(( (SECONDS - t0) % 60 ))s${c_off}"
+  done
+}
+
+cmd_up() {
+  local d; d=$(lab_dir "$1"); shift
+  provision $(meta "$d" NEEDS)
+  cmd_start "$(basename "$d")" "$@"
 }
 
 # run_cleanup <script> <label> [--yes]: show what will run, confirm, run it.
@@ -130,6 +210,8 @@ cmd_exam() {
   local n=${1:-} action=${2:-show} d st; [[ -n $n ]] || { usage; exit 2; }
   d=$(exam_dir "$n"); st=$LAB_STATE/exam-$n
   case $action in
+    prep) provision $(meta "$d" NEEDS) ;;
+    up) provision $(meta "$d" NEEDS) && cmd_exam "$n" start ;;
     start)
       [[ -f $st/deadline ]] && (( $(date +%s) < $(<"$st/deadline") )) && die "exam $n is already running (lab exam $n status)"
       mkdir -p "$st"; rm -f "$st"/*
@@ -274,7 +356,7 @@ cmd_reset() {
     wait_task "$upid"; pve POST "/$vmid/status/start" >/dev/null
     info "$name: rolled back to $snap"
   done
-  rm -rf "$LAB_STATE/results" "$LAB_STATE/started" "$LAB_STATE"/exam-*
+  rm -rf "$LAB_STATE/results" "$LAB_STATE/started" "$LAB_STATE/provisioned" "$LAB_STATE/up" "$LAB_STATE"/exam-*
   # The jump host goes last: rolling it back ends this session.
   vm=$(lab_vmids jump); vmid=${vm%%:*}
   info "Rolling back the jump host; you'll be disconnected. Reconnect in about a minute."
@@ -285,6 +367,7 @@ case ${1:-} in
   list|ls) cmd_list ;;
   show) cmd_show "${2:?lab id}" ;;
   start) shift; cmd_start "${1:?lab id}" "${@:2}" ;;
+  up) shift; cmd_up "${1:?lab id}" "${@:2}" ;;
   check|grade) cmd_check "${2:?lab id}" ;;
   solution) cmd_solution "${2:?lab id}" ;;
   cleanup|clean) cmd_cleanup "${2:?lab id}" "${3:-}" ;;

@@ -105,6 +105,37 @@ const DOMAINS = [
 const domainOf = key => DOMAINS.find(d => d.key === key || d.name === key || (key === "Troubleshooting" && d.key === "Trouble")) || { name: key, short: key, weight: 0 };
 const shortDomain = key => { const d = domainOf(key); return d.short || d.name; };
 const labPassed = lab => lab.best === 1;
+const labsByNum = () => Object.fromEntries((S.overview?.labs || []).map(l => [l.num, l]));
+
+// The labs `needs` relies on (followed through their own needs) that aren't passed or built
+// yet: what `lab up` would build. A lab that's done vouches for everything it needed.
+function missingPrereqs(needs) {
+  const byNum = labsByNum(), out = new Set(), seen = new Set(), queue = [...needs];
+  while (queue.length) {
+    const n = queue.shift();
+    if (seen.has(n)) continue;
+    seen.add(n);
+    const l = byNum[n];
+    if (!l || labPassed(l) || l.provisioned) continue;
+    out.add(n);
+    queue.push(...l.needs);
+  }
+  return [...out].sort();
+}
+
+// Ask before building prerequisites; resolves true when it's fine to go ahead.
+function confirmSpinUp(what, missing) {
+  if (!missing.length) return Promise.resolve(true);
+  const list = h("b", { class: "mono" }, missing.join(", "));
+  if (!S.overview?.can_spin_up)
+    return dialog({ title: `${what} builds on unfinished labs`, confirm: "Start anyway",
+      body: [p("It assumes labs ", list, " are done. Spinning them up needs the reference solutions, which aren't installed on this jump host."),
+        p("Do those labs first, or start anyway if you've built the same thing yourself.")] });
+  return dialog({ title: `Spin up ${what.toLowerCase()}?`, confirm: "Spin up",
+    body: [p("It builds on labs ", list, ", which aren't done yet."),
+      p("Spin up builds them first with the reference solutions, the same way the verified lab chain does, then sets this up. Their commands run out of sight, so nothing is given away; a lab whose grader already passes is skipped."),
+      p("From a bare cluster this can take half an hour or more. The output panel shows progress.")] });
+}
 
 // --- markdown ------------------------------------------------------------------------------
 
@@ -314,12 +345,12 @@ function showJobDialog(info) {
 // --- terminals ------------------------------------------------------------------------------------
 
 const TERM_THEME = {
-  background: "#0f1626", foreground: "#dfe8ff", cursor: "#5a8cff", cursorAccent: "#0f1626",
-  selectionBackground: "#326ce566",
-  black: "#0f1d3d", red: "#ff6b7f", green: "#4fdca8", yellow: "#ffcf6b", blue: "#5a8cff",
-  magenta: "#b99bff", cyan: "#5cd0f0", white: "#cfdaf5",
-  brightBlack: "#51658f", brightRed: "#ff8fa0", brightGreen: "#7beabf", brightYellow: "#ffdd94",
-  brightBlue: "#8fb0ff", brightMagenta: "#d0bcff", brightCyan: "#8fe0f6", brightWhite: "#ffffff",
+  background: "#303030", foreground: "#f1f3f5", cursor: "#8fb0ff", cursorAccent: "#303030",
+  selectionBackground: "#326ce580",
+  black: "#403f4c", red: "#ff7b72", green: "#7ee2a8", yellow: "#f2cc60", blue: "#7aa2f7",
+  magenta: "#d2a8ff", cyan: "#79d4cf", white: "#dee2e6",
+  brightBlack: "#868e96", brightRed: "#ffa198", brightGreen: "#a5f0c5", brightYellow: "#f8e3a1",
+  brightBlue: "#a5c0ff", brightMagenta: "#e2c5ff", brightCyan: "#c0e0de", brightWhite: "#ffffff",
 };
 
 const Terms = {
@@ -345,7 +376,7 @@ const Terms = {
   },
 
   async init() {
-    await Promise.all(["400", "700"].map(w => document.fonts.load(`${w} ${this.size}px "Rec Mono Casual"`))).catch(() => {});
+    await Promise.all(["400", "700"].map(w => document.fonts.load(`${w} ${this.size}px "JetBrainsMono Nerd Font Mono"`))).catch(() => {});
     let list = await api("/terms");
     if (!list.length) list = [await api("/terms", { method: "POST", body: {} })];
     for (const t of list) this.add(t);
@@ -356,7 +387,7 @@ const Terms = {
     const el = h("div", { class: "xt hidden" });
     this.host.append(el);
     const term = new Terminal({
-      fontFamily: '"Rec Mono Casual", ui-monospace, monospace', fontSize: this.size, lineHeight: 1.18,
+      fontFamily: '"JetBrainsMono Nerd Font Mono", ui-monospace, monospace', fontSize: this.size, lineHeight: 1.18,
       cursorBlink: true, cursorStyle: "bar", scrollback: 5000, allowProposedApi: true,
       theme: TERM_THEME, macOptionIsMeta: true, rightClickSelectsWord: true,
     });
@@ -464,12 +495,41 @@ const Terms = {
     this.active.term.focus();
   },
 
+  // Edit a tab's name in place. Enter or leaving the field saves it on the server (so it
+  // survives a reload and shows in other windows); Escape cancels.
+  rename(tab, label) {
+    if (!label || label.querySelector("input")) return;
+    const input = h("input", { class: "tab-name", value: tab.title, maxlength: 24, spellcheck: false, "aria-label": "Tab name" });
+    let done = false;
+    const finish = async save => {
+      if (done) return;
+      done = true;
+      const title = input.value.trim().replace(/\s+/g, " ");
+      if (save && title && title !== tab.title) {
+        try { tab.title = (await api(`/terms/${tab.sid}`, { method: "PATCH", body: { title } })).title; }
+        catch (e) { toast(`Couldn't rename: ${e.message}`, true); }
+      }
+      this.renderBar();
+      tab.term.focus();
+    };
+    input.onkeydown = e => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+    };
+    input.onblur = () => finish(true);
+    input.onclick = e => e.stopPropagation();
+    label.replaceChildren(input);
+    input.focus(); input.select();
+  },
+
   renderBar() {
     if (!this.bar) return;
     this.bar.replaceChildren(
       ...this.tabs.map(t => h("div", { class: "term-tab" + (t === this.active ? " on" : ""), onclick: () => this.activate(t) },
-        h("span", {}, t.title),
-        h("button", { title: "Close this shell", onclick: e => { e.stopPropagation(); this.close(t); } }, "×"))),
+        h("span", { class: "name", title: "Double-click to rename", ondblclick: e => { e.stopPropagation(); this.rename(t, e.currentTarget); } }, t.title),
+        h("button", { class: "ren", title: "Rename this tab", "aria-label": "Rename", onclick: e => { e.stopPropagation(); this.rename(t, e.currentTarget.previousSibling); } }, "✎"),
+        h("button", { class: "x", title: "Close this shell", "aria-label": "Close", onclick: e => { e.stopPropagation(); this.close(t); } }, "×"))),
       h("button", { title: "New shell on jump", onclick: () => this.create() }, "+ new"),
       h("span", { class: "grow" }),
       h("span", { class: "hint" }, "student@jump"),
@@ -509,17 +569,6 @@ const polar = (cx, cy, r, i, n, rot = -90) => {
   return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
 };
 
-// A seven-sided wheel: the heptagon and seven spokes of the Kubernetes mark, simplified.
-function brandMark() {
-  const pts = [...Array(7)].map((_, i) => polar(16, 16, 13.6, i, 7).map(v => v.toFixed(2)).join(",")).join(" ");
-  const spokes = [...Array(7)].map((_, i) => {
-    const [x1, y1] = polar(16, 16, 4.6, i, 7), [x2, y2] = polar(16, 16, 10, i, 7);
-    return `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`;
-  }).join("");
-  return svgEl(`<svg viewBox="0 0 32 32" aria-hidden="true"><polygon points="${pts}" fill="#326ce5" stroke="#326ce5" stroke-width="3.2" stroke-linejoin="round"/>
-    <g stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none"><circle cx="16" cy="16" r="4.6"/>${spokes}</g></svg>`);
-}
-
 // Line icons, drawn on a 24px grid.
 const ICONS = {
   lab: '<path d="M9.5 3h5M10.5 3v6.2L5.3 18a2 2 0 0 0 1.7 3h10a2 2 0 0 0 1.7-3l-5.2-8.8V3"/><path d="M7.6 14.5h8.8"/>',
@@ -550,11 +599,9 @@ function domainRing(domains, labs) {
   const ticks = labs.map((l, i) => {
     const [x1, y1] = polar(c, c, 114, i, labs.length), [x2, y2] = polar(c, c, 121, i, labs.length);
     const on = l.best === 1;
-    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${on ? "var(--k8s-hi)" : "var(--line-2)"}" stroke-width="2.4" stroke-linecap="round"${on ? ' style="filter: drop-shadow(0 0 4px var(--k8s-hi))"' : ""}/>`;
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${on ? "var(--k8s)" : "var(--line-2)"}" stroke-width="2.4" stroke-linecap="round"/>`;
   }).join("");
-  const hept = [...Array(7)].map((_, i) => polar(c, c, 80, i, 7).map(v => v.toFixed(1)).join(",")).join(" ");
   return svgEl(`<svg viewBox="0 0 250 250" role="img" aria-label="Curriculum coverage by exam domain">
-    <polygon points="${hept}" fill="none" stroke="var(--line)" stroke-width="1.2" stroke-linejoin="round" stroke-dasharray="1 6" stroke-linecap="round"/>
     <g transform="rotate(-90 ${c} ${c})">${arcs}</g>${ticks}</svg>`);
 }
 
@@ -562,7 +609,7 @@ function domainRing(domains, labs) {
 
 function renderTop() {
   const top = h("header", { class: "top" },
-    h("a", { class: "brand", href: "#/", title: "Overview" }, brandMark(), h("span", { class: "brand-text" }, "Kubernetes ", h("b", {}, "Playgrounds"))),
+    h("a", { class: "brand", href: "#/", title: "Overview" }, h("span", { class: "brand-text" }, "Kubernetes ", h("b", {}, "Playgrounds"))),
     h("nav", { class: "nav" },
       h("a", { href: "#/", "data-r": "labs" }, "Labs"),
       h("a", { href: "#/exams", "data-r": "exams" }, "Exams"),
@@ -656,9 +703,9 @@ function showLogin() {
       } catch (x) { err.textContent = x.message; btn.disabled = false; pw.select(); }
     },
   },
-    h("a", { class: "brand", href: "#/" }, brandMark(), h("span", { class: "brand-text" }, "Kubernetes ", h("b", {}, "Playgrounds"))),
+    h("a", { class: "brand", href: "#/" }, h("span", { class: "brand-text" }, "Kubernetes ", h("b", {}, "Playgrounds"))),
     h("h1", {}, "Sign in"),
-    h("p", {}, "Your CKA labs, mock exams and a shell on the jump host, in the browser. Use the student password."),
+    h("p", {}, "Sign in with the student password to open the labs, the mock exams and a shell on the jump host."),
     h("label", { for: "pw" }, "Password"), pw, btn, err);
   form.classList.add("hud");
   form.querySelector("label").className = "label-sm";
@@ -700,27 +747,27 @@ async function route() {
 function labCard(l, next) {
   const i = DOMAINS.indexOf(domainOf(l.domain));
   const r = l.result;
-  const state = labPassed(l) ? "passed" : r ? "graded" : l.started_at ? "started" : "new";
+  const state = labPassed(l) ? "passed" : r ? "graded" : l.started_at ? "started" : l.provisioned ? "built" : "new";
   const href = `#/lab/${l.id}`;
   const pct = Math.round((l.best || 0) * 100);
   return h("article", { class: `lab-card hud ${state}` },
-    h("header", {}, icon("lab"), h("span", {}, "Lab on ", h("b", {}, shortDomain(l.domain))),
+    h("header", {}, icon("lab"), h("span", {}, shortDomain(l.domain)),
       h("i", { class: "dom", style: { background: i < 0 ? "var(--muted)" : `var(--d${i + 1})` } }),
       h("span", { class: "grow" }), l.minutes ? h("span", { class: "min" }, icon("clock"), `${l.minutes} min`) : null),
     h("div", { class: "body" },
       h("h3", {}, h("a", { href }, h("span", { class: "no" }, l.num), l.title)),
       h("p", { class: "cur" }, l.curriculum.join(" · ")),
       h("div", { class: "tags" },
-        h("span", { class: "tag" }, `#${l.id.replace(/^\d+-/, "")}`),
-        l.phases.length ? h("span", { class: "tag" }, "#breaks-things") : null,
+        h("span", { class: "tag" }, l.id.replace(/^\d+-/, "")),
+        l.phases.length ? h("span", { class: "tag" }, "breaks things") : null,
         l.needs.length ? h("span", { class: "tag" }, `needs ${l.needs.join(", ")}`) : null)),
     h("footer", {},
       h("div", { class: "prog" },
-        h("span", { class: "label-sm" }, { passed: "Passed", graded: "Last check", started: "Started", new: "Status" }[state]),
+        h("span", { class: "label-sm" }, { passed: "Passed", graded: "Last check", started: "Started", built: "Status", new: "Status" }[state]),
         h("span", { class: "val" }, state === "passed" ? `all ${r ? r.total : ""} checks pass` : state === "graded" ? `${r.pass}/${r.total} checks · ${ago(r.at)}`
-          : state === "started" ? ago(l.started_at) : "not started"),
+          : state === "started" ? ago(l.started_at) : state === "built" ? "built by spin up" : "not started"),
         h("span", { class: "bar" }, h("i", { style: { width: `${pct}%` } }))),
-      h("a", { class: "btn" + (l === next ? " solid" : ""), href }, { passed: "Review", graded: "Continue", started: "Continue", new: "Start lab" }[state])));
+      h("a", { class: "btn" + (l === next ? " solid" : ""), href }, { passed: "Review", graded: "Continue", started: "Continue", built: "Start lab", new: "Start lab" }[state])));
 }
 
 async function viewOverview(main, focus) {
@@ -765,11 +812,11 @@ async function viewOverview(main, focus) {
           h("span", { class: "min" }, icon("clock"), `${e.minutes} min`)),
         h("div", { class: "body" },
           h("h3", {}, h("a", { href: `#/exam/${e.n}` }, e.title.replace(/^CKA m/, "M").replace(/^CKA /, ""))),
-          h("p", { class: "cur" }, `${e.tasks} tasks across all five domains, timed and graded like the real exam.`),
+          h("p", { class: "cur" }, `${e.tasks} tasks across all five exam domains, timed and weighted like the real exam.`),
           h("div", { class: "tags" },
             running ? h("span", { class: "tag mark" }, "in progress") : null,
             e.history.length ? e.history.slice(-5).map(x => h("span", { class: "tag " + (x.passed ? "pass" : "fail") }, `${x.score}%`))
-              : !running && h("span", { class: "tag" }, "#not-attempted"))),
+              : !running && h("span", { class: "tag" }, "not attempted"))),
         h("footer", {},
           h("div", { class: "prog" }, h("span", { class: "label-sm" }, "Best score"),
             h("span", { class: "val" }, best == null ? "—" : `${best} %`),
@@ -784,16 +831,16 @@ async function viewOverview(main, focus) {
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
     h("section", { class: "hero" },
       h("div", { class: "hero-text" },
-        h("div", { class: "kicker" }, "CKA · Kubernetes v1.35"),
-        h("h1", {}, "Master Kubernetes ", h("em", {}, "by breaking it")),
-        h("p", { class: "lead" }, h("b", {}, "31 hands-on labs"), " in curriculum order and ", h("b", {}, "two timed mock exams"),
-          ", graded check by check against a 7-VM cluster you build yourself. No hints, like the real exam."),
+        h("div", { class: "kicker" }, "Certified Kubernetes Administrator (CKA) · Kubernetes v1.35"),
+        h("h1", {}, "Hands-on practice for the CKA exam"),
+        h("p", { class: "lead" }, "Kubernetes Playgrounds is a set of ", h("b", {}, "31 labs"), " and ", h("b", {}, "two timed mock exams"),
+          " that follow the CKA curriculum. You work on a seven-VM cluster that you build yourself, and every task is graded check by check. As in the exam, there are no hints."),
         h("div", { class: "cta" },
           next ? h("a", { class: "btn solid lg", href: `#/lab/${next.id}` }, next.started_at ? `Resume lab ${next.num}` : `Start lab ${next.num}`, icon("arrow"))
             : h("a", { class: "btn solid lg", href: "#/exams" }, "Take a mock exam", icon("arrow")),
           h("a", { class: "btn lg", href: "#/exams" }, "Mock exams"))),
       term),
-    h("div", { class: "section-head" }, h("h2", {}, icon("chart"), "Progress")),
+    h("div", { class: "section-head" }, h("h2", {}, icon("chart"), "Your progress")),
     h("section", { class: "stats" },
       h("div", { class: "ring-panel hud" },
         h("div", { class: "head" }, h("span", { class: "label-sm" }, "Curriculum coverage"), h("span", { class: "label-sm muted" }, "by exam weight")),
@@ -886,7 +933,7 @@ function notesEditor(key, placeholder) {
 async function viewLab(main, id, tabName) {
   let lab = await api(`/labs/${id}`);
   if (!S.overview) await loadOverview().catch(() => {});
-  const byNum = Object.fromEntries((S.overview?.labs || []).map(l => [l.num, l]));
+  let byNum = labsByNum();
   let tab = tabName || "task";
   let solutionMd = null;
   const taskHead = splitTaskHeader(lab.markdown);
@@ -900,7 +947,9 @@ async function viewLab(main, id, tabName) {
     filter: j => j.target === lab.id || j.target === lab.num,
     onEnd: async info => {
       lab = await api(`/labs/${lab.id}`);
-      loadOverview().catch(() => {});
+      await loadOverview().catch(() => {});
+      byNum = labsByNum();
+      syncStartLabel();
       if (info.action === "lab-check") {
         const r = lab.result;
         if (r) toast(r.pass === r.total ? `Lab ${lab.num}: all ${r.total} checks pass` : `Lab ${lab.num}: ${r.pass}/${r.total} checks pass`);
@@ -910,7 +959,16 @@ async function viewLab(main, id, tabName) {
   });
 
   const busy = () => !!S.jobs.current;
-  const startBtn = h("button", { class: "btn", onclick: () => Jobs.start("lab-start", lab.id) }, "Start");
+  // Start = `lab up`: builds missing prerequisite labs first (after asking), then runs setup.
+  const startBtn = h("button", { class: "btn", onclick: async () => {
+    if (await confirmSpinUp(`Lab ${lab.num}`, missingPrereqs(lab.needs))) Jobs.start(S.overview?.can_spin_up ? "lab-up" : "lab-start", lab.id);
+  } });
+  const syncStartLabel = () => {
+    const n = missingPrereqs(lab.needs).length;
+    startBtn.textContent = n ? "Spin up" : "Start";
+    startBtn.title = n ? `Builds the ${n} unfinished lab${n > 1 ? "s" : ""} this one needs, then starts it` : "Run this lab's setup";
+  };
+  syncStartLabel();
   const checkBtn = h("button", { class: "btn solid", onclick: () => Jobs.start("lab-check", lab.id) }, "Check");
   const cleanBtn = h("button", {
     class: "btn", disabled: !lab.has_cleanup,
@@ -943,7 +1001,8 @@ async function viewLab(main, id, tabName) {
       els.push(h("span", { title: `started ${lab.started_at}` }, "started ", h("span", { class: "mono" }, mins < 120 ? `${mins} min` : ago(lab.started_at).replace(" ago", "")), " ago"));
     }
     if (lab.needs.length) els.push(h("span", {}, "needs ", lab.needs.map((n, i) => [i ? ", " : "",
-      h("a", { href: `#/lab/${byNum[n]?.id || n}`, class: "mono", style: { color: byNum[n] && !labPassed(byNum[n]) ? "var(--warn)" : "" }, title: byNum[n] && !labPassed(byNum[n]) ? "not passed yet" : "passed" }, `lab ${n}`)])));
+      h("a", { href: `#/lab/${byNum[n]?.id || n}`, class: "mono", style: { color: byNum[n] && !labPassed(byNum[n]) && !byNum[n].provisioned ? "var(--warn)" : "" },
+        title: !byNum[n] ? "" : labPassed(byNum[n]) ? "passed" : byNum[n].provisioned ? "built by spin up" : "not done yet" }, `lab ${n}`)])));
     for (const [k, v] of taskHead.extras) els.push(h("span", { class: "md-inline" }, `${k.toLowerCase()} `, inlineMd(v)));
     if (lab.result) els.push(h("span", {}, "last check ", h("span", { class: "mono" }, `${lab.result.pass}/${lab.result.total}`), ` · ${ago(lab.result.at)}`));
     facts.replaceChildren(...els);
@@ -1121,6 +1180,9 @@ function viewExamBriefing(main, exam) {
   const drawer = jobDrawer({ filter: j => j.target === String(n) || j.target === `before-exam${n}` });
   drawer.style.marginTop = "16px";
   startBtn.onclick = async () => {
+    if (!S.overview) await loadOverview().catch(() => {});
+    const missing = missingPrereqs(exam.needs || []);
+    if (!(await confirmSpinUp(`Mock exam ${n}`, missing))) return;
     const ok = await dialog({
       title: `Start mock exam ${n}?`,
       body: [p("Setting up the tasks takes a few minutes; some of them break the cluster on purpose. The 120-minute clock starts when setup finishes."),
@@ -1129,6 +1191,12 @@ function viewExamBriefing(main, exam) {
     });
     if (!ok) return;
     startBtn.disabled = true;
+    if (missing.length && S.overview?.can_spin_up) {   // build what the exam assumes before the snapshot
+      const j = await Jobs.start("exam-prep", String(n));
+      if (!j) { startBtn.disabled = false; return; }
+      if ((await Jobs.wait(j.id)).code !== 0) { toast("Spinning up the prerequisite labs failed; see the output.", true); startBtn.disabled = false; return; }
+      loadOverview().catch(() => {});
+    }
     if (snapBox.checked) {
       const j = await Jobs.start("snapshot", `before-exam${n}`);
       if (!j) { startBtn.disabled = false; return; }

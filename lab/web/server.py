@@ -127,6 +127,7 @@ def lab_summary(d: Path, history: list) -> dict:
         "has_cleanup": (d / "cleanup.sh").exists(),
         "has_solution": (LAB_SOLUTIONS / "labs" / d.name / "solution.md").exists(),
         "started_at": started_file.read_text().strip() if started_file.exists() else None,
+        "provisioned": (LAB_STATE / "provisioned" / d.name).exists(),
         "result": read_json(LAB_STATE / "results" / f"{d.name}.json"),
         "best": max((a["pass"] / a["total"] for a in attempts if a.get("total")), default=None),
         "attempts": len(attempts),
@@ -169,7 +170,8 @@ def exam_summary(d: Path) -> dict:
     title = next((l[2:].strip() for l in readme.splitlines() if l.startswith("# ")), f"Mock exam {d.name}")
     tasks = sorted(t for t in (d / "tasks").iterdir() if t.is_dir())
     return {"n": d.name, "title": title, "tasks": len(tasks), "minutes": EXAM_MINUTES,
-            "pass_mark": EXAM_PASS, **exam_state(d.name)}
+            "pass_mark": EXAM_PASS, "needs": read_meta(d / "meta").get("NEEDS", "").split(),
+            **exam_state(d.name)}
 
 
 # --- auth ---------------------------------------------------------------------------
@@ -273,6 +275,7 @@ async def api_overview(request):
         "labs": [lab_summary(d, history) for d in lab_dirs()],
         "exams": [exam_summary(d) for d in exam_dirs()],
         "solutions": LAB_SOLUTIONS.exists(),
+        "can_spin_up": (LAB_SOLUTIONS / "labs").is_dir(),
     })
 
 
@@ -369,11 +372,12 @@ def job_argv(action: str, target: str, arg: str):
     if action.startswith("lab-"):
         d = find_lab(target)
         lab_id = d.name
-        if action == "lab-start":
+        if action in ("lab-start", "lab-up"):
+            verb = action[4:]
             phases = read_meta(d / "meta").get("PHASES", "").split()
             if arg and arg not in phases:
                 raise web.HTTPBadRequest(text="unknown phase")
-            return [LAB_BIN, "start", lab_id] + ([arg] if arg else []), None, f"lab start {lab_id} {arg}".strip()
+            return [LAB_BIN, verb, lab_id] + ([arg] if arg else []), None, f"lab {verb} {lab_id} {arg}".strip()
         if action == "lab-check":
             return [LAB_BIN, "check", lab_id], None, f"lab check {lab_id}"
         if action == "lab-cleanup":
@@ -381,7 +385,7 @@ def job_argv(action: str, target: str, arg: str):
     if action.startswith("exam-"):
         n = find_exam(target).name
         sub = action[5:]
-        if sub in ("start", "check"):
+        if sub in ("start", "check", "prep"):
             return [LAB_BIN, "exam", n, sub], None, f"lab exam {n} {sub}"
         if sub == "cleanup":
             return [LAB_BIN, "exam", n, "cleanup", "--yes"], None, f"lab exam {n} cleanup"
@@ -708,6 +712,18 @@ async def api_new_term(request):
     return web.json_response({"sid": t.sid, "title": t.title})
 
 
+async def api_rename_term(request):
+    t = TERMS.get(request.match_info["sid"])
+    if not t:
+        raise web.HTTPNotFound(text="no such terminal")
+    body = await request.json()
+    title = " ".join("".join(c for c in str(body.get("title", "")) if c.isprintable()).split())[:24].rstrip()
+    if not title:
+        raise web.HTTPBadRequest(text="empty title")
+    t.title = title
+    return web.json_response({"sid": t.sid, "title": t.title})
+
+
 async def api_close_term(request):
     t = TERMS.get(request.match_info["sid"])
     if t:
@@ -771,6 +787,7 @@ def make_app() -> web.Application:
     r.add_get("/api/snapshots", api_snapshots)
     r.add_get("/api/terms", api_terms)
     r.add_post("/api/terms", api_new_term)
+    r.add_patch("/api/terms/{sid}", api_rename_term)
     r.add_delete("/api/terms/{sid}", api_close_term)
     r.add_get("/api/terms/{sid}/ws", term_ws)
     r.add_static("/static/", STATIC, append_version=False)

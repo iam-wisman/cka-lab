@@ -26,6 +26,9 @@ const SHOTS = [
   { file: "cluster.png", hash: "#/cluster" },
   { file: "catalog.png", hash: "#/", scrollTo: "#labs" },
   { file: "phone.png", hash: "#/", width: 390, height: 844 },
+  // A lab whose prerequisites aren't done: Start becomes "Spin up", which asks first.
+  { file: "spinup.png", hash: "#/lab/22",
+    eval: `[...document.querySelectorAll(".actions .btn")].find(b => b.textContent === "Spin up").click()` },
 ];
 
 const profile = mkdtempSync(join(tmpdir(), "cka-shots-"));
@@ -70,6 +73,10 @@ try {
     if (shot.scrollTo) {
       await js(`document.querySelector(${JSON.stringify(shot.scrollTo)}).scrollIntoView()`);
       await sleep(400);
+    }
+    if (shot.eval) {
+      await js(shot.eval);
+      await sleep(700);
     }
     if (shot.type) {
       await js(`Terms.paste(${JSON.stringify(shot.type)}); Terms.send(Terms.active, {t: "i", d: "\\r"})`);

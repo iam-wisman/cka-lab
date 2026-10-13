@@ -111,8 +111,8 @@ can be mixed freely.
 | | |
 |---|---|
 | **Dashboard** | a live `lab status` terminal card for the 7 VMs, a coverage ring per exam domain (weighted like the exam), labs passed, checks passing, best mock exam, cluster health, and the labs as a searchable, filterable card catalogue |
-| **Lab workspace** | the task (with its documentation links) beside a terminal; **Start**, **Check**, **Clean up** stream their output live; a **Results** tab lists every check, grouped, with expected-vs-found; per-lab notes saved on the jump host; solutions behind a "try first" prompt |
-| **Terminals** | real login shells (xterm.js over a WebSocket to a PTY). Sessions live on the server, so a reload or a closed tab reattaches to the same shell; several tabs; code blocks in the task have a **paste** button that types into the shell without pressing Enter |
+| **Lab workspace** | the task (with its documentation links) beside a terminal; **Start** (or **Spin up**, when earlier labs it builds on aren't done), **Check**, **Clean up** stream their output live; a **Results** tab lists every check, grouped, with expected-vs-found; per-lab notes saved on the jump host; solutions behind a "try first" prompt |
+| **Terminals** | real login shells (xterm.js over a WebSocket to a PTY). Sessions live on the server, so a reload or a closed tab reattaches to the same shell; several tabs, renamed by double-clicking (names are kept on the server); JetBrains Mono Nerd Font, so prompt and `ls` icons render; code blocks in the task have a **paste** button that types into the shell without pressing Enter |
 | **Mock exams** | briefing, optional snapshot before setup, 120-minute countdown, question navigator with weights and flags, a notepad, auto-grade when time runs out, weighted results per task, and a review mode showing which checks failed |
 | **Cluster** | power state of the 7 VMs (Proxmox API) and node status (Kubernetes), snapshots: take, delete, reset (typed confirmation; the page waits out the jump host's own rollback and reconnects) |
 
@@ -125,9 +125,11 @@ can be mixed freely.
 </tr><tr>
 <td><img src="docs/web/results.png" alt="Results tab: every check grouped by node, with expected-vs-found details"></td>
 <td><img src="docs/web/cluster.png" alt="Cluster page: VM power state, node status, snapshots"></td>
+</tr><tr>
+<td><img src="docs/web/spinup.png" alt="Spin up: lab 22 offers to build the unfinished labs it builds on first"></td>
+<td><img src="docs/web/phone.png" alt="The dashboard at phone width"></td>
 </tr></table>
 
-<p align="center"><img src="docs/web/phone.png" width="260" alt="The dashboard at phone width"></p>
 
 How it's built:
 
@@ -147,17 +149,16 @@ How it's built:
 - **Front end:** plain JavaScript with no build step. xterm.js, marked and
   DOMPurify are vendored at pinned versions, so the console works without
   internet access.
-- **Design:** inspired by the catalogue look of hands-on lab platforms such as
-  [iximiuz Labs](https://labs.iximiuz.com/): light first, a sky-blue wash at the
-  top, white cards with a tinted header strip ("Lab on Architecture · 75 min")
-  and a status footer with a progress bar, `#tags`, and outlined uppercase
-  actions. Kubernetes blue `#326CE5` is the accent, and the seven-sided wheel is
-  the logo mark. It is light only. The coverage ring shows
+- **Design:** styled after [kubernetes.io](https://kubernetes.io/): its palette
+  (the blue `#326CE5` nav bar and hero band, dark blue `#234CA0`, coral
+  `#ED6A5A`, slate `#403F4C`, mint `#C0E0DE`, Bootstrap greys), its typeface
+  Open Sans, sentence-case buttons and plain, factual copy. White cards with a
+  header strip and a status footer; light only. The coverage ring shows
   progress: each arc is an exam domain sized by its weight and filled by your
-  progress, and its 31 ticks are the labs. Type is Nunito for reading and
-  Rec Mono Casual (Recursive fixed at its mono and casual settings) for anything
-  you could type. Both are OFL and served locally; their licenses sit next to
-  the files in `lab/web/static/`.
+  progress, and its 31 ticks are the labs. Anything you could type, the
+  terminal included, is JetBrains Mono Nerd Font (the Mono variant, so icons
+  keep to one cell). Both fonts are OFL and served locally; their licenses sit
+  next to the files in `lab/web/static/fonts/`.
 - **Screenshots:** made by `tools/web-screenshots.mjs`, which drives headless
   Chrome over the DevTools protocol with no npm packages.
 
@@ -210,6 +211,30 @@ ssh -i ~/.ssh/cka-lab student@<jump-ip>
 lab list
 # or open https://<jump-ip>/ and log in with the student password
 ```
+
+## Spinning a lab up on demand
+
+Every lab can be started on its own, even on a bare cluster. `lab up <id>`
+works out which earlier labs it builds on (each lab's `NEEDS`, followed through
+their own needs), skips any that are done, and builds the rest with the
+reference solutions before running the lab's setup:
+
+```bash
+lab up 22        # needs 10 and 20, which need 05 ... 01: builds what's missing, then starts 22
+lab exam 1 up    # the same for a mock exam (it assumes 07, 09, 23 and 25)
+```
+
+A prerequisite counts as done when it passed `lab check`, was built by an
+earlier `lab up`, or its grader passes now (checked quietly, nothing
+recorded). Labs are probed from the highest down, and a lab that passes vouches
+for everything it needed, so an early lab is never re-run on a cluster that has
+moved past it. Each build does what the verified 01 → 31 chain does: setup,
+reference solution, grade at 100 %, cleanup. The solution output goes to
+`~/.cka-lab/up/<lab>.log`, not the screen, so nothing about those labs is
+spoiled. From a bare cluster expect half an hour or more. It needs the private
+solutions installed (`install-lab.sh --solutions <dir>`); in the web console
+**Start** turns into **Spin up** and asks first. `lab list` shows those labs as
+"built by lab up", and `lab reset` clears that along with everything else.
 
 ## Resetting and retrying
 

@@ -9,6 +9,7 @@
 #                                              unreachable every later kc() check fails
 #   section "heading"                          group the output
 #   finish                                     print the score, save it, exit 0 only on 100%
+#                                              (GRADE_PROBE=1: save nothing, only the exit code)
 #
 # Checks never abort the script: a grader always reports every requirement.
 
@@ -68,6 +69,8 @@ need_cluster() {
 
 finish() {
   local pct=0 dir=$LAB_STATE/results
+  # `lab up` asks "is this lab's end state already there?" without recording an attempt.
+  if (( ${GRADE_PROBE:-0} )); then (( GRADE_TOTAL && GRADE_PASS == GRADE_TOTAL )) && exit 0; exit 1; fi
   (( GRADE_TOTAL )) && pct=$(( GRADE_PASS * 100 / GRADE_TOTAL ))
   mkdir -p "$dir"
   printf '%s\n' "${GRADE_CHECKS[@]}" | jq -s --arg id "$GRADE_ID" --argjson pass "$GRADE_PASS" \
