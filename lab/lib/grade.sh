@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Grading helpers for labs/*/check.sh. Sourced after common.sh.
 #
 #   check "description" <command...>          pass when the command succeeds

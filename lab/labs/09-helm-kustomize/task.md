@@ -56,15 +56,6 @@ Don't modify anything in `~/kustomize/base`.
 lab check 09
 ```
 
-## Notes
-
-- `helm show values` is the documentation for a chart's settings.
-- Kustomize's `commonLabels` is deprecated precisely *because* it rewrites
-  selectors. Look at the `labels` field and its options.
-- Selectors on a Deployment are immutable. If you apply a version that changes
-  them, the apply fails, and you'll be deleting and recreating to recover.
-- `helm history` shows every revision. A rollback creates a new one.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

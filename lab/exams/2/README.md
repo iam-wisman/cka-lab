@@ -6,7 +6,9 @@ Before you start, save the cluster: `lab snapshot before-exam2`. Some tasks
 break things on purpose; afterwards `lab reset before-exam2` gets you back.
 
 Rules, like the real exam:
-- Work from `jump`. Each task names the node or namespace to use.
+- Work from `jump`. Each task names the node or namespace to use, and has its own
+  kubeconfig context (`e2-t3` for task 3, default namespace `e2-t3`): switch first
+  with `kubectl config use-context`, as in the real exam.
 - Use only the documentation the real exam allows: mainly kubernetes.io/docs (see the Linux Foundation candidate handbook for the current list).
 - Answers that go into files go under `/home/student/exam2/`.
 - Partial credit: each task is graded check by check and weighted.

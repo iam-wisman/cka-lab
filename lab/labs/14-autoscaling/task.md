@@ -40,11 +40,6 @@ Deployment `api` (a CPU-hungry PHP app) and Service `api` exist.
 lab check 14
 ```
 
-## Notes
-
-- `kubectl describe hpa` explains why metrics are missing.
-- Resizing uses a dedicated subresource. Editing the pod spec the normal way is rejected.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

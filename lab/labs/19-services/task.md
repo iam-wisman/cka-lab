@@ -9,13 +9,13 @@ container port **named `http`**. Pod `client` (busybox) is your test client.
 
 ## Tasks
 
-1. **ClusterIP `api`**: port **8080**, targeting the container port **by
+1. **ClusterIP `api`**: port **{{PORT}}**, targeting the container port **by
    name**, so the port number can change without editing the Service. A
-   client must keep hitting the same pod for **10 minutes**.
+   client must keep hitting the same pod for **{{STICKY}} minutes**.
 
-2. **NodePort `api-public`**: node port **30080**. Responses must preserve the
+2. **NodePort `api-public`**: node port **{{NODEPORT}}**. Responses must preserve the
    **client's source IP**, so nodes without an `api` pod must not forward
-   traffic to other nodes. From `jump`, `curl http://<node-with-an-api-pod>:30080`
+   traffic to other nodes. From `jump`, `curl http://<node-with-an-api-pod>:{{NODEPORT}}`
    answers `api`.
 
 3. **Headless `api-peers`**: DNS returns every `api` pod IP, **including pods
@@ -34,11 +34,6 @@ container port **named `http`**. Pod `client` (busybox) is your test client.
 ```
 lab check 19
 ```
-
-## Notes
-
-- How does a Service find the EndpointSlices that belong to it? (One label.)
-- `externalTrafficPolicy` has two values; one of them preserves source IPs.
 
 ## References
 

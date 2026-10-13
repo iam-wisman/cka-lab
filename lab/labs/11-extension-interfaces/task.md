@@ -47,17 +47,6 @@ you have.
 lab check 11
 ```
 
-## Notes
-
-- `crictl` talks CRI, the same interface the kubelet uses, so it only sees what
-  the kubelet would. containerd's own client is `ctr`; mind its **namespaces**
-  (`ctr ns ls`).
-- In containerd 2, registry hosts are configured as
-  `<config_path>/<registry>/hosts.toml`. Find `config_path` in the effective
-  config, then read the "Registry Configuration" document in the containerd repo.
-- Where does the kubelet read its runtime endpoint from? Look at its config
-  file, not just its command line.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

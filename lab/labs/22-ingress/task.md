@@ -52,14 +52,6 @@ its own name over HTTP.
 lab check 22
 ```
 
-## Notes
-
-- `pathType: Prefix` matches on path *elements*: `/api` matches `/api/x`
-  but not `/apiv2`.
-- An Ingress with no `ingressClassName` is picked up only by the default class.
-- Read `helm show values traefik/traefik --version 41.7.1` for `ingressClass`,
-  `providers`, `service` and `ports`.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

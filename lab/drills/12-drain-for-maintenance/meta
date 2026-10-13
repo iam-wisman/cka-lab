@@ -1,0 +1,4 @@
+TITLE="Drain a worker past a PodDisruptionBudget"
+DOMAIN="Arch"
+SECONDS=180
+NEEDS="05"

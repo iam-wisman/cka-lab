@@ -1,4 +1,8 @@
-# CKA Lab: a self-hosted, auto-graded Kubernetes v1.35 practice environment
+<p align="center"><img src="docs/brand/helmyard-banner.svg" alt="HelmYard: Kubernetes Playgrounds" width="640"></p>
+
+# HelmYard: a self-hosted, auto-graded Kubernetes practice environment
+
+*Kubernetes Playgrounds* for the CKA today and the whole Kubestronaut path next.
 
 A complete training environment for the **Certified Kubernetes Administrator
 (CKA)** exam, built on a Proxmox homelab. It provisions a 7-VM
@@ -12,7 +16,7 @@ The labs are deliberately hard. You build the cluster yourself with kubeadm
 v1.34 to v1.35, restore a three-member etcd from a snapshot, and debug faults
 injected into nodes, control planes, workloads and networking.
 
-Work in the terminal over SSH, or in **Kubernetes Playgrounds**, the browser
+Work in the terminal over SSH, or in **HelmYard**, the browser
 console on the jump host: the task on the left, a real shell on the right, a
 **Check** button that grades on demand, and a timed exam mode. No hints: the
 labs are challenges, like the exam. See
@@ -25,6 +29,15 @@ labs are challenges, like the exam. See
 > solution (it must reach 100%). That process found and fixed real bugs in
 > graders, solutions, and once in the host's network driver; see
 > [What verification caught](#what-verification-caught).
+
+## Kubestronaut
+
+The platform is growing from CKA practice into preparation for all five
+certifications a **Kubestronaut** holds: CKA, CKAD, CKS, KCNA and KCSA. The web
+console's **Kubestronaut** tab shows every track with its official domains and
+weights (`lab/tracks.json`). KCNA and KCSA already run on a quiz engine with
+domain practice and timed mock exams; CKAD and CKS are mapped to their
+curricula, and their labs are next. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -80,11 +93,30 @@ kernel tuning, so lab 01 is real work.
 ### The `lab` CLI (`lab/`)
 
 ```
-lab list | show <id> | start <id> [phase] | check <id> | solution <id>
-lab exam <n> start | show | status | check
+lab list | show <id> | start <id> [phase] [--same] | up <id> | check <id> | solution <id>
+lab drill [list] | <id> | random [domain] | check <id> | cleanup <id>
+lab exam <n> start | prep | up | show | status | check
 lab snapshots [delete <name>] | snapshot <name> | reset <name>
 lab cleanup <id> | exam <n> cleanup
 ```
+
+- **Harder than the exam, on purpose.** Tasks have no hints (no "Notes" or
+  tips sections; only the requirement and links to the official docs),
+  several break things that have to be found first, and drill budgets are
+  tighter than the real exam allows.
+- **Fresh values every attempt.** A lab or drill can declare randomised values
+  in a `params` file (`int`, `pick`, `word`, `hex`, `calc` generators).
+  `lab start` draws them into `~/.cka-lab/params/<lab>.env`; the task text
+  shows them through `{{PLACEHOLDERS}}`, and setup, grader, cleanup and the
+  reference solution all read the same file. A retake asks for different
+  ports, names and numbers, so it tests skill, not memory. `--same` keeps the
+  current values. Lab 19 and every drill use this; more labs follow.
+- **Speed drills** (`lab/drills/`) are single tasks against a clock, from 1:30
+  to 3:00, with fresh values each start. The clock runs from setup until every
+  check passes, and every run is recorded with its time.
+- **Mock exams use kubeconfig contexts** like the real exam: every task has its
+  own (`e1-t3` for task 3, default namespace `e1-t3`), and the exam view shows
+  the `use-context` line to paste first.
 
 - **Graders** are bash scripts on a small assertion library (`check`,
   `check_eq`, `check_match`) that never aborts, so every requirement is
@@ -101,6 +133,14 @@ lab cleanup <id> | exam <n> cleanup
   faked.
 - `lab snapshot` shuts the nodes down **in parallel** before snapshotting, so
   all three etcd members are captured at one consistent point.
+- **Resets keep your progress.** A snapshot covers the six node VMs plus the
+  jump host's *lab state*: what the labs install and write there (kubectl and
+  its apt repository, Helm, HAProxy, the kubeconfig, files in the home
+  directory), saved as a file. `lab reset` rolls the nodes back and puts that
+  state back exactly, removing packages and files added since. The jump VM itself
+  keeps running, so grades, exam history and notes survive, open shells and
+  the web console stay connected, and editor state (`~/.vscode-server`) is
+  untouched. Snapshots taken before this existed still roll back the jump VM.
 
 ### Kubernetes Playgrounds (web console, `lab/web/`)
 
@@ -110,11 +150,12 @@ can be mixed freely.
 
 | | |
 |---|---|
-| **Dashboard** | a live `lab status` terminal card for the 7 VMs, a coverage ring per exam domain (weighted like the exam), labs passed, checks passing, best mock exam, cluster health, and the labs as a searchable, filterable card catalogue |
+| **Dashboard** | a live `lab status` terminal card for the 7 VMs; exam readiness as a ring and a bar per domain (weighted like the exam); an "up next" card; labs passed (one square per lab, coloured by domain), checks passing, best mock exam, a 14-day activity chart; and the labs as a searchable, filterable card catalogue |
 | **Lab workspace** | the task (with its documentation links) beside a terminal; **Start** (or **Spin up**, when earlier labs it builds on aren't done), **Check**, **Clean up** stream their output live; a **Results** tab lists every check, grouped, with expected-vs-found; per-lab notes saved on the jump host; solutions behind a "try first" prompt |
 | **Terminals** | real login shells (xterm.js over a WebSocket to a PTY). Sessions live on the server, so a reload or a closed tab reattaches to the same shell; several tabs, renamed by double-clicking (names are kept on the server); JetBrains Mono Nerd Font, so prompt and `ls` icons render; code blocks in the task have a **paste** button that types into the shell without pressing Enter |
-| **Mock exams** | briefing, optional snapshot before setup, 120-minute countdown, question navigator with weights and flags, a notepad, auto-grade when time runs out, weighted results per task, and a review mode showing which checks failed |
-| **Cluster** | power state of the 7 VMs (Proxmox API) and node status (Kubernetes), snapshots: take, delete, reset (typed confirmation; the page waits out the jump host's own rollback and reconnects) |
+| **Speed drills** | a catalogue with best times, a drill workspace with the clock against the budget, Start (new values), Check, Clean up, and a bar per past run |
+| **Mock exams** | briefing, optional snapshot before setup, 120-minute countdown, the task's kubeconfig context to paste, question navigator with weights and flags, a notepad, auto-grade when time runs out, weighted results per task with **time spent against each task's share of the clock**, and a review mode showing which checks failed |
+| **Cluster** | power state of the 7 VMs (Proxmox API) and node status (Kubernetes), snapshots: take, delete, reset (typed confirmation; the page stays connected, except for older snapshots that roll back the jump VM, where it waits and reconnects) |
 
 <table><tr>
 <td><img src="docs/web/overview.png" alt="Dashboard: the Kubernetes Playgrounds hero with a live lab status terminal card"></td>
@@ -128,6 +169,9 @@ can be mixed freely.
 </tr><tr>
 <td><img src="docs/web/spinup.png" alt="Spin up: lab 22 offers to build the unfinished labs it builds on first"></td>
 <td><img src="docs/web/phone.png" alt="The dashboard at phone width"></td>
+</tr><tr>
+<td><img src="docs/web/kubestronaut.png" alt="Kubestronaut: the five certification tracks with their domains and progress"></td>
+<td><img src="docs/web/drills.png" alt="Speed drills: one task against a tight clock, with best times"></td>
 </tr></table>
 
 
@@ -140,6 +184,13 @@ How it's built:
   a shell string). One job runs at a time and its output streams over
   server-sent events. The grader now also writes every check (section, result,
   detail) to its JSON result, which the Results tab renders.
+- **TLS:** `install-lab.sh` creates a small local CA on your machine (next to
+  the other secrets in `~/.local/share/cka-lab`, never in the repo) and signs
+  the jump host's certificate with it; the jump host's key never leaves it.
+  The CA is **name-constrained** to private addresses and `*.cka.lab`, so
+  trusting it with `tools/trust-console-ca.sh` (macOS, Arch/Fedora,
+  Debian/Ubuntu, plus the Chrome/Firefox NSS stores) can't let it vouch for
+  real websites. After that the browser opens the console without a warning.
 - **Security:** the login is the student password, stored on the jump host only
   as a salted PBKDF2 hash. The session cookie is HttpOnly, Secure and
   SameSite=Strict. Changes need a custom header and a same-origin `Origin`,
@@ -153,18 +204,17 @@ How it's built:
   (the blue `#326CE5` nav bar and hero band, dark blue `#234CA0`, coral
   `#ED6A5A`, slate `#403F4C`, mint `#C0E0DE`, Bootstrap greys), its typeface
   Open Sans, sentence-case buttons and plain, factual copy. White cards with a
-  header strip and a status footer; light only. The coverage ring shows
-  progress: each arc is an exam domain sized by its weight and filled by your
-  progress, and its 31 ticks are the labs. Anything you could type, the
+  header strip and a status footer; light only. The readiness ring has one
+  arc per exam domain, sized by its weight and filled as its labs are passed. Anything you could type, the
   terminal included, is JetBrains Mono Nerd Font (the Mono variant, so icons
   keep to one cell). Both fonts are OFL and served locally; their licenses sit
   next to the files in `lab/web/static/fonts/`.
 - **Screenshots:** made by `tools/web-screenshots.mjs`, which drives headless
   Chrome over the DevTools protocol with no npm packages.
 
-`lab reset` to a snapshot taken before the console was installed (such as an
-old `base`) brings back a jump host without it; re-run `infra/install-lab.sh`
-afterwards. Restarting the service ends open browser shells.
+Resets leave the jump host's software alone, so the console survives them.
+Only an old snapshot that still rolls back the jump VM can bring back a jump
+host without it; re-run `infra/install-lab.sh` afterwards. Restarting the service ends open browser shells.
 
 Keep it on your LAN. It is a root-capable shell on your lab, so for remote
 access use a VPN such as Tailscale rather than forwarding the port.
@@ -231,10 +281,16 @@ for everything it needed, so an early lab is never re-run on a cluster that has
 moved past it. Each build does what the verified 01 → 31 chain does: setup,
 reference solution, grade at 100 %, cleanup. The solution output goes to
 `~/.cka-lab/up/<lab>.log`, not the screen, so nothing about those labs is
-spoiled. From a bare cluster expect half an hour or more. It needs the private
-solutions installed (`install-lab.sh --solutions <dir>`); in the web console
-**Start** turns into **Spin up** and asks first. `lab list` shows those labs as
-"built by lab up", and `lab reset` clears that along with everything else.
+spoiled. It needs the private solutions installed (`install-lab.sh --solutions
+<dir>`); in the web console **Start** turns into **Spin up** and asks first.
+`lab list` shows those labs as "built by lab up".
+
+The first spin-up from a bare cluster builds the core (labs 01–05) and caches it
+as the snapshot `up-core`, which takes about 20 minutes. After that, a spin-up
+from bare rolls the nodes back to `up-core` in a few minutes and builds only
+what's left. Restoring it only *adds* to the jump host, so none of your files
+are removed. The cache is ignored, and rebuilt, when labs 01–05 or their
+solutions change. `lab snapshots delete up-core` frees its space.
 
 ## Resetting and retrying
 
@@ -256,7 +312,7 @@ snapshot:
 ```bash
 lab snapshot before-08     # take one BEFORE starting a risky lab
 # ... attempt the lab ...
-lab reset before-08        # roll every VM back; the jump host reboots, reconnect after ~1 min
+lab reset before-08        # roll the cluster back; grades and notes are kept, nobody is disconnected
 lab snapshots              # list them
 lab snapshots delete before-08   # free the space once you're past it
 lab reset base             # start completely over: bare nodes, framework still installed
@@ -281,17 +337,25 @@ lab/
   web/static/             front end: app.js, app.css, vendored xterm.js/marked/DOMPurify, fonts
   lib/common.sh           node access, grader kubectl, helm release decoding
   lib/grade.sh            assertion helpers
-  labs/NN-name/           meta · task.md · setup.sh · check.sh · cleanup.sh
+  labs/NN-name/           meta · task.md · setup.sh · check.sh · cleanup.sh · [params]
+  drills/NN-name/         meta · params · task.md · setup.sh · check.sh · cleanup.sh
   exams/N/                README + cleanup.sh + tasks/NN-name/{meta,task.md,setup.sh,check.sh}
 docs/
   architecture.svg        the diagram above (generated)
   diagram/                build.py + icons (official Kubernetes icons, project logos)
+  brand/                  HelmYard logo kit: build.py draws the mark (colour, reversed) and the banner
+  ROADMAP.md              the Kubestronaut plan: CKAD, CKS, KCNA, KCSA
 tools/
   references.py           per-lab documentation links → "References" in each task.md
   add-references.py       writes those sections
   check-links.sh          verifies every link still resolves
   gen-cleanup.py          generates cleanup.sh from each task's "Cleaning up" section
   web-screenshots.mjs     README screenshots of the web console (headless Chrome)
+  validate.py             offline consistency checks (metadata, prerequisites, placeholders, README images)
+  versions.json           every pinned component version, in one place
+  check-versions.py       compares those pins and the CNCF curricula with upstream
+  trust-console-ca.sh     trusts the console CA on this machine (you run it)
+.github/workflows/ci.yml  syntax, ShellCheck, validate, generated files; weekly links + version report
 docs/web/                 those screenshots
 ```
 
@@ -306,6 +370,9 @@ separate private repository, so the labs stay useful as practice.
 [MIT](LICENSE)
 
 ## Versions
+
+Pinned in `tools/versions.json`; `tools/check-versions.py` (weekly in CI)
+reports anything upstream has moved past, and new CNCF curricula.
 
 Kubernetes v1.34.12 → v1.35.9 · containerd 2.x · Calico v3.32.2 · Helm 3.22 ·
 MetalLB 0.16.1 · Traefik chart 41.7.1 · Envoy Gateway v1.9.2 ·

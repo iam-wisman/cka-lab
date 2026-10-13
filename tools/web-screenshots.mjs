@@ -26,6 +26,8 @@ const SHOTS = [
   { file: "cluster.png", hash: "#/cluster" },
   { file: "catalog.png", hash: "#/", scrollTo: "#labs" },
   { file: "phone.png", hash: "#/", width: 390, height: 844 },
+  { file: "kubestronaut.png", hash: "#/kubestronaut" },
+  { file: "drills.png", hash: "#/drills" },
   // A lab whose prerequisites aren't done: Start becomes "Spin up", which asks first.
   { file: "spinup.png", hash: "#/lab/22",
     eval: `[...document.querySelectorAll(".actions .btn")].find(b => b.textContent === "Spin up").click()` },

@@ -1,0 +1,6 @@
+# Drawn fresh for every attempt (see draw_params in lab/bin/lab).
+NS   word d
+DEP  word api
+REP  int 2 5
+SVC  word svc
+PORT int 8000 8999

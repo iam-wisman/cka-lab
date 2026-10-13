@@ -1,0 +1,50 @@
+# Checks that need no cluster: syntax, lint, metadata, generated files, links.
+name: ci
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"   # weekly, for the documentation links
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax
+        run: |
+          for f in lab/bin/lab $(find lab infra tools -name '*.sh'); do bash -n "$f" || exit 1; done
+      - name: ShellCheck (errors)
+        run: shellcheck -S error lab/bin/lab $(find lab infra tools -name '*.sh')
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: JavaScript syntax
+        run: |
+          node --check lab/web/static/app.js
+          node --check tools/web-screenshots.mjs
+      - name: Python syntax
+        run: python3 -m py_compile lab/web/server.py tools/*.py docs/diagram/build.py
+      - name: Lab and exam metadata, README images
+        run: python3 tools/validate.py
+      - name: Generated files are up to date
+        run: |
+          python3 tools/gen-cleanup.py
+          python3 tools/add-references.py
+          git diff --exit-code || { echo "::error::run tools/gen-cleanup.py and tools/add-references.py and commit the result"; exit 1; }
+
+  links:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Documentation links resolve
+        run: tools/check-links.sh
+      - name: Pinned versions and curricula vs upstream (report only)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/check-versions.py | tee -a "$GITHUB_STEP_SUMMARY"

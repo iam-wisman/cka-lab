@@ -64,16 +64,6 @@ The grader looks at each node over SSH: package versions and holds, the
 effective containerd configuration (`containerd config dump`), live and
 persisted kernel settings, `/proc/swaps` and `/etc/fstab`.
 
-## Notes
-
-- The exam gives you a cluster that already exists. Building one from parts is
-  how you learn what each piece does, and that is what the troubleshooting
-  domain (30%) tests.
-- containerd 2 uses config version 3. Plugin names changed from 1.x
-  (`io.containerd.grpc.v1.cri` became `io.containerd.cri.v1.runtime` and
-  `io.containerd.cri.v1.images`), so most older blog posts are wrong now.
-- Five nodes: consider doing one by hand, then scripting the rest.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
@@ -104,7 +94,7 @@ snapshot. Take one **before** you start:
 ```bash
 lab snapshot before-01
 # ... attempt the lab ...
-lab reset before-01        # all VMs roll back; reconnect to jump after ~1 minute
+lab reset before-01        # the cluster and the lab files on jump roll back; grades are kept
 ```
 
 If you didn't take one, `lab reset base` returns all nodes to bare Ubuntu (the `lab` command stays installed).

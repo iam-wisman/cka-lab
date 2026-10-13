@@ -1,0 +1,3 @@
+# Drawn fresh for every attempt (see draw_params in lab/bin/lab).
+NODE pick cp1 cp2 cp3 worker1 worker2
+FILE word pods

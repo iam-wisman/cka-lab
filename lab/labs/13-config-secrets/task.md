@@ -49,13 +49,6 @@ The pod must have the label `app: config-demo` and be `Running` with both contai
 lab check 13
 ```
 
-## Notes
-
-- `kubectl create configmap --from-file`, `--from-env-file` and `--from-literal`
-  produce different key layouts. Look at what each one gives you.
-- An immutable ConfigMap can't be edited, only deleted and recreated.
-- `subPath` mounts don't receive updates when the ConfigMap changes. Know why.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

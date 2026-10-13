@@ -1,0 +1,4 @@
+TITLE="Dedicate a node to one team"
+DOMAIN="Workloads"
+SECONDS=150
+NEEDS="05"

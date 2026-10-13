@@ -1,0 +1,7 @@
+# Drawn fresh for every attempt (see draw_params in lab/bin/lab).
+NS   word d
+PVC  word data
+SIZE int 1 5
+POD  word writer
+WORD word
+FILE word note

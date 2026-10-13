@@ -1,0 +1,6 @@
+# Drawn fresh for every attempt (see draw_params in lab/bin/lab).
+NS    word d
+ROLE  pick monitor billing audit reports
+APORT int 7000 7999
+NP    word allow
+GOOD  word client

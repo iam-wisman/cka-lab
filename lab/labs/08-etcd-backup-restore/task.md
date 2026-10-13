@@ -47,19 +47,6 @@ three, which forces you to understand what a restore really creates.
 lab check 08
 ```
 
-## Notes
-
-- `etcdctl snapshot save` talks to a running member over the network;
-  `etcdutl snapshot restore` works on files and needs no running etcd.
-- A restore writes a **new data directory** with **new cluster membership**.
-  Think about what that means for three members restored separately: what
-  must every member agree on? Read `etcdutl snapshot restore --help`.
-- Stop the API servers and etcd on **all** control planes before bringing any
-  restored member up. The kubelet stops a static pod when you move its manifest
-  out of `/etc/kubernetes/manifests/`.
-- After a restore, restart kube-controller-manager, kube-scheduler and the
-  kubelets so they don't act on stale cached state.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

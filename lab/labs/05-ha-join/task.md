@@ -56,18 +56,6 @@ certificate requests waiting that you didn't expect.
 lab check 05
 ```
 
-## Notes
-
-- `kubeadm token create --print-join-command` prints the join command for
-  workers. For control planes, look at `kubeadm init phase --help`.
-- To query etcd, use the `etcdctl` inside the etcd static pod
-  (`kubectl -n kube-system exec etcd-cp1 -- etcdctl ...`). It needs the
-  endpoint and the three certificate flags; the etcd manifest has the paths.
-- Optional resilience drill, after the snapshot: `sudo systemctl stop kubelet`
-  and stop the API server container on `cp1` (or power `cp1` off from
-  Proxmox), then confirm `kubectl get nodes` still works from `jump`.
-  Restore afterwards.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
@@ -99,7 +87,7 @@ snapshot. Take one **before** you start:
 ```bash
 lab snapshot before-05
 # ... attempt the lab ...
-lab reset before-05        # all VMs roll back; reconnect to jump after ~1 minute
+lab reset before-05        # the cluster and the lab files on jump roll back; grades are kept
 ```
 
 If you didn't take one, `lab reset` to a snapshot from after lab 04 (e.g. `after-04`), or rebuild from lab 01. Un-joining nodes by hand (`kubeadm reset` on each, `kubectl delete node`, `etcdctl member remove`) is possible but easy to get wrong.

@@ -49,18 +49,6 @@ delete it.**
 lab check 07
 ```
 
-## Notes
-
-- `kubectl drain` respects PodDisruptionBudgets: it retries evictions that
-  would violate one, **forever**. If a drain hangs, read what it's waiting
-  for. "Allowed disruptions: 0" has a fix that doesn't touch the PDB.
-- Drain also refuses DaemonSet-managed pods and pods with `emptyDir` data
-  unless you tell it what to do with them. Know which flags and why.
-- `kubeadm upgrade plan` tells you what will change. Read it before `apply`.
-- Each pkgs.k8s.io channel holds one minor version (lab 01).
-- After the kubelet restarts with a new version it may request a new
-  serving certificate (lab 03/05).
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
@@ -89,7 +77,7 @@ snapshot. Take one **before** you start:
 ```bash
 lab snapshot before-07
 # ... attempt the lab ...
-lab reset before-07        # all VMs roll back; reconnect to jump after ~1 minute
+lab reset before-07        # the cluster and the lab files on jump roll back; grades are kept
 ```
 
 If you didn't take one, there is no supported downgrade: `lab reset cluster-ready` (from lab 05) is the way back to v1.34.12.

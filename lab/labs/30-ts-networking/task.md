@@ -34,12 +34,6 @@ Make all three answer (`checkout ok`, `payments ok`, `inventory ok`) from
 lab check 30
 ```
 
-## Notes
-
-- Work outward from the client: name resolution → Service → EndpointSlices → pod port → policy.
-- `kubectl get endpointslices -l kubernetes.io/service-name=<svc>` is the
-  fastest way to see whether a Service found any pods.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

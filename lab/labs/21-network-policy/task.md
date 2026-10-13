@@ -48,15 +48,6 @@ lab check 21
 The grader opens real connections between pods. Allowed paths must connect,
 forbidden ones must time out.
 
-## Notes
-
-- Inside one `from:` entry, `namespaceSelector` and `podSelector` are ANDed.
-  As two entries (two dashes), they're ORed. One dash is the whole lab.
-- Egress policies select on **pod** IPs, not Service IPs. Connecting through a
-  Service still works, because Calico evaluates the policy after the Service
-  IP is translated to a pod IP.
-- `kubernetes.io/metadata.name` is a label every namespace has automatically.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

@@ -1,0 +1,8 @@
+# Drawn fresh for every attempt (see draw_params in lab/bin/lab).
+NS     word d
+POD    word web
+TAG    pick 1.27-alpine 1.26-alpine 1.25-alpine
+TIER   pick frontend backend cache batch
+CPU    int 50 300 50
+MEM    int 32 160 32
+MEMLIM calc MEM * 2

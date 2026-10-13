@@ -1,0 +1,4 @@
+TITLE="A static pod on a worker"
+DOMAIN="Arch"
+SECONDS=150
+NEEDS="05"

@@ -60,17 +60,6 @@ disagree, pods get IPs from the wrong range, and routing and NetworkPolicy
 lab check 04
 ```
 
-## Notes
-
-- `helm show values` on the chart shows the `installation:` key: its
-  contents become the `Installation` resource's `spec`.
-- If you install with the wrong CIDR, changing the values afterwards is not
-  enough: Calico doesn't change an existing IP pool's CIDR. Read the
-  operator's docs on what can and can't be changed, then decide whether to
-  uninstall cleanly or `lab reset`.
-- containerd decides which CNI config to load. `containerd config dump` shows
-  the directories it uses.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

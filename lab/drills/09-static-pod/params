@@ -1,0 +1,5 @@
+# Drawn fresh for every attempt (see draw_params in lab/bin/lab).
+NS   word d
+NODE pick worker1 worker2
+POD  word probe
+IMG  pick nginx:1.27-alpine httpd:2.4-alpine

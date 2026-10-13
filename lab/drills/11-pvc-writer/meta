@@ -1,0 +1,4 @@
+TITLE="Claim storage and write to it"
+DOMAIN="Storage"
+SECONDS=180
+NEEDS="25"

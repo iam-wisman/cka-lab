@@ -44,14 +44,6 @@ jump host runs a DNS server for the company zone `corp.internal`.
 lab check 24
 ```
 
-## Notes
-
-- A Corefile can have several **server blocks**; the most specific zone wins.
-- The `hosts` plugin answers only for names it knows **if** told to pass
-  everything else on. Without that, it returns NXDOMAIN for the rest of its zone.
-- `kubeadm upgrade` rewrites the CoreDNS ConfigMap only when it can migrate
-  it safely; keep your edits minimal and valid.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

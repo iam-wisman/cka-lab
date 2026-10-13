@@ -8,7 +8,8 @@
 # - installs a grader-only kubectl in /opt/cka-lab/bin (students install their own)
 # - optionally copies the private solutions repo to /opt/cka-lab-solutions
 # - installs the web console (lab/web) as lab-web.service on https://<jump>/, with a
-#   self-signed certificate. It logs in with the student password, read from
+#   certificate signed by a local, name-constrained CA (see tools/trust-console-ca.sh).
+#   It logs in with the student password, read from
 #   $WEB_PASSWORD or ~/.local/share/cka-lab/student-password; --web-password
 #   re-sets it on an existing install.
 # - creates a Proxmox API token that can only snapshot/rollback/power the lab VMs
@@ -53,7 +54,7 @@ jssh 'sudo install -m 644 /dev/stdin /etc/bash_completion.d/lab' <<'EOF'
 _lab() {
   local cur=${COMP_WORDS[COMP_CWORD]} prev=${COMP_WORDS[1]:-}
   if (( COMP_CWORD == 1 )); then
-    COMPREPLY=($(compgen -W "list show start up check solution cleanup exam snapshots snapshot reset" -- "$cur"))
+    COMPREPLY=($(compgen -W "list show start up check solution cleanup exam drill snapshots snapshot reset" -- "$cur"))
   elif (( COMP_CWORD == 2 )) && [[ $prev =~ ^(show|start|up|check|solution|cleanup)$ ]]; then
     COMPREPLY=($(compgen -W "$(ls /opt/cka-lab/labs)" -- "$cur"))
   elif (( COMP_CWORD == 3 )) && [[ $prev == exam ]]; then
@@ -62,6 +63,10 @@ _lab() {
 }
 complete -F _lab lab
 EOF
+
+# "base" leaves the jump VM alone on reset; its jump-side lab state is "nothing yet".
+# Only record that from a jump host that really has none of the lab tooling.
+jssh 'test -f /var/lib/cka-lab/snapshots/base.tgz || { command -v kubectl || command -v helm || command -v haproxy; } >/dev/null || lab jump-state base'
 
 echo "[install] grader kubectl $GRADER_KUBECTL_VERSION"
 jssh "test -x /opt/cka-lab/bin/kubectl && /opt/cka-lab/bin/kubectl version --client -o json | jq -e '.clientVersion.gitVersion==\"$GRADER_KUBECTL_VERSION\"' >/dev/null || {
@@ -117,14 +122,42 @@ PY
   printf "WEB_PASSWORD_HASH='%s'\nWEB_PORT=443\nWEB_CERT=/etc/cka-lab/web.crt\nWEB_KEY=/etc/cka-lab/web.key\n" "$hash" |
     jssh 'sudo install -m 600 -o student -g student /dev/stdin /etc/cka-lab/web.env'
 fi
-# Self-signed certificate for the jump host's LAN address; regenerated when the address changes.
-jssh "sudo openssl x509 -in /etc/cka-lab/web.crt -noout -ext subjectAltName 2>/dev/null | grep -q 'IP Address:$JUMP_IP\$\|IP Address:$JUMP_IP,' || {
-  sudo openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 -subj '/CN=Kubernetes Playgrounds' \
-    -addext 'subjectAltName=IP:$JUMP_IP,DNS:jump.cka.lab,DNS:jump' -addext 'extendedKeyUsage=serverAuth' \
-    -keyout /etc/cka-lab/web.key -out /etc/cka-lab/web.crt 2>/dev/null &&
-  sudo chown student:student /etc/cka-lab/web.key /etc/cka-lab/web.crt && sudo chmod 600 /etc/cka-lab/web.key; }"
+# TLS: a small local CA (kept on this machine with the other secrets, never in the repo)
+# signs the jump host's certificate, so trusting the CA once (tools/trust-console-ca.sh)
+# makes the browser warning go away. The CA is name-constrained to private addresses
+# and *.cka.lab, so even a leaked CA key can't vouch for real websites. The jump host
+# makes its own key; only a signing request travels.
+CA_DIR=${CA_DIR:-$HOME/.local/share/cka-lab}
+CA_KEY=$CA_DIR/console-ca.key CA_CRT=$CA_DIR/console-ca.crt
+if [[ ! -f $CA_KEY || ! -f $CA_CRT ]]; then
+  echo "[install] creating the console CA in $CA_DIR"
+  mkdir -p "$CA_DIR" && chmod 700 "$CA_DIR"
+  (umask 077; openssl ecparam -name prime256v1 -genkey -noout -out "$CA_KEY")
+  openssl req -x509 -new -key "$CA_KEY" -sha256 -days 3650 -subj "/CN=Kubernetes Playgrounds local CA ($(hostname -s))" \
+    -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' -addext 'keyUsage=critical,keyCertSign,cRLSign' \
+    -addext 'nameConstraints=critical,permitted;IP:10.0.0.0/255.0.0.0,permitted;IP:172.16.0.0/255.240.0.0,permitted;IP:192.168.0.0/255.255.0.0,permitted;IP:100.64.0.0/255.192.0.0,permitted;DNS:cka.lab,permitted;DNS:.cka.lab,permitted;DNS:jump' \
+    -out "$CA_CRT"
+fi
+ca_fp=$(openssl x509 -in "$CA_CRT" -noout -fingerprint -sha256 | cut -d= -f2)
+# Re-issue when the address changed or the certificate isn't from this CA (e.g. the old self-signed one).
+if ! jssh "sudo openssl x509 -in /etc/cka-lab/web.crt -noout -ext subjectAltName 2>/dev/null | grep -q 'IP Address:$JUMP_IP\$\|IP Address:$JUMP_IP,'" ||
+   ! jssh 'sudo cat /etc/cka-lab/web.crt' 2>/dev/null | openssl verify -CAfile "$CA_CRT" >/dev/null 2>&1; then
+  echo "[install] issuing the console certificate for $JUMP_IP"
+  ext=$(mktemp); csr=$(mktemp); crt=$(mktemp)
+  printf 'subjectAltName=IP:%s,DNS:jump.cka.lab,DNS:jump\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature\nbasicConstraints=critical,CA:FALSE\n' "$JUMP_IP" >"$ext"
+  jssh "sudo openssl ecparam -name prime256v1 -genkey -noout -out /etc/cka-lab/web.key.new &&
+    sudo chown student:student /etc/cka-lab/web.key.new && sudo chmod 600 /etc/cka-lab/web.key.new &&
+    openssl req -new -key /etc/cka-lab/web.key.new -subj '/CN=Kubernetes Playgrounds'" >"$csr"
+  openssl x509 -req -in "$csr" -CA "$CA_CRT" -CAkey "$CA_KEY" -CAcreateserial -CAserial "$CA_DIR/console-ca.srl" \
+    -days 397 -sha256 -extfile "$ext" -out "$crt" 2>/dev/null
+  cat "$crt" "$CA_CRT" | jssh 'sudo install -m 644 -o student -g student /dev/stdin /etc/cka-lab/web.crt &&
+    sudo mv /etc/cka-lab/web.key.new /etc/cka-lab/web.key'
+  rm -f "$ext" "$csr" "$crt"
+fi
 jssh 'sudo install -m 644 /opt/cka-lab/web/lab-web.service /etc/systemd/system/lab-web.service &&
   sudo systemctl daemon-reload && sudo systemctl enable -q lab-web && sudo systemctl restart lab-web'
-echo "[install] web console: https://$JUMP_IP/  (self-signed certificate; log in with the student password)"
+echo "[install] web console: https://$JUMP_IP/  (log in with the student password)"
+echo "[install] to stop the certificate warning, trust the console CA once: tools/trust-console-ca.sh"
+echo "          (CA $CA_CRT, SHA-256 $ca_fp)"
 
 echo "[install] done: ssh -i $JUMP_KEY $JUMP   then   lab list"

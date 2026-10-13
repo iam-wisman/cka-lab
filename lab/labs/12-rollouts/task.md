@@ -37,14 +37,6 @@ Deployment `web` runs `nginx:1.26-alpine` with 4 replicas.
 lab check 12
 ```
 
-## Notes
-
-- `kubectl rollout history deploy/web --revision=N` shows a revision's pod template.
-- A rollback doesn't revert strategy settings; it only swaps the pod
-  template back.
-- `kubectl annotate ... kubernetes.io/change-cause=... --overwrite` sets the
-  change-cause that history shows. (`--record` is gone.)
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

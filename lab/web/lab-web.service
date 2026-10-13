@@ -1,6 +1,6 @@
 # Kubernetes Playgrounds: browser console for the CKA lab (lab/web/server.py). Installed by infra/install-lab.sh.
 [Unit]
-Description=Kubernetes Playgrounds (CKA lab web console)
+Description=HelmYard: Kubernetes Playgrounds (lab web console)
 After=network-online.target
 Wants=network-online.target
 

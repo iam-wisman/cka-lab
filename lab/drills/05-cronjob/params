@@ -1,0 +1,7 @@
+# Drawn fresh for every attempt (see draw_params in lab/bin/lab).
+NS       word d
+CJ       word report
+EVERY    pick 5 10 15 20 30
+KEEP     int 2 6
+DEADLINE int 30 120 10
+WORD     word

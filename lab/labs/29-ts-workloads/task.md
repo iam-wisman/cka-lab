@@ -29,12 +29,6 @@ Make **every** Deployment fully available, with these constraints:
 lab check 29
 ```
 
-## Notes
-
-- `kubectl get pods` → STATUS tells you the category; `kubectl describe pod`
-  (events) and `kubectl logs --previous` tell you the cause.
-- Some fields are immutable. You may have to delete and recreate an object.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

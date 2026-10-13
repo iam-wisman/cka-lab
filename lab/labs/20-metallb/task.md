@@ -32,16 +32,14 @@ answers ARP for them on the lab network.
 4. Prove auto-assignment skips `reserved`: Service **`web-auto`**
    (LoadBalancer, port 80, no annotations) gets an address from `lab-pool`.
 
+**Constraint:** addresses 10.10.10.201–203 are used by labs 22 and 23; don't pin
+them to anything in this lab.
+
 ## Grading
 
 ```
 lab check 20
 ```
-
-## Notes
-
-- Addresses 10.10.10.201–203 will be used by labs 22/23; don't pin them here.
-- MetalLB's custom resources live in `metallb.io/v1beta1`.
 
 ## References
 

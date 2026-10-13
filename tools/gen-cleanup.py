@@ -41,8 +41,12 @@ def write(dirpath, src_name, bodies):
         if os.path.exists(path):
             os.remove(path)
         return 0
-    text = HDR.format(src=src_name) + "\n".join(
-        "\n".join(harden(l) for l in b.rstrip("\n").splitlines()) for b in useful) + "\n"
+    body = "\n".join("\n".join(harden(l) for l in b.rstrip("\n").splitlines()) for b in useful) + "\n"
+    hdr = HDR.format(src=src_name)
+    if "{{" in body:   # randomised values: {{KEY}} in the docs, ${KEY} from this attempt's params
+        body = re.sub(r"\{\{([A-Z_][A-Z0-9_]*)\}\}", r"${\1}", body)
+        hdr = hdr.replace("set -uo pipefail\n", 'source "$LAB_HOME/lib/common.sh"   # loads this attempt\'s values (GRADE_ID)\nset -uo pipefail\n')
+    text = hdr + body
     open(path, "w").write(text)
     os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return 1

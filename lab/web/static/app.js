@@ -1,4 +1,4 @@
-/* Kubernetes Playgrounds (the CKA lab web console): front end. Plain JS, no build step.
+/* HelmYard (Kubernetes Playgrounds) (the CKA lab web console): front end. Plain JS, no build step.
    Views: overview (#/), lab workspace (#/lab/<id>), mock exam (#/exam/<n>),
    cluster and snapshots (#/cluster). The terminal pane is created once and
    moved between workspaces so shells survive navigation. */
@@ -105,6 +105,9 @@ const DOMAINS = [
 const domainOf = key => DOMAINS.find(d => d.key === key || d.name === key || (key === "Troubleshooting" && d.key === "Trouble")) || { name: key, short: key, weight: 0 };
 const shortDomain = key => { const d = domainOf(key); return d.short || d.name; };
 const labPassed = lab => lab.best === 1;
+// Grades outlive `lab reset`; the cluster doesn't. A pass counts as "in the cluster" only if
+// it came after the last reset (lab up checks the cluster itself either way).
+const passedSinceReset = l => !!l.result && l.result.pass === l.result.total && Date.parse(l.result.at) / 1000 > (S.overview?.last_reset || 0);
 const labsByNum = () => Object.fromEntries((S.overview?.labs || []).map(l => [l.num, l]));
 
 // The labs `needs` relies on (followed through their own needs) that aren't passed or built
@@ -116,7 +119,7 @@ function missingPrereqs(needs) {
     if (seen.has(n)) continue;
     seen.add(n);
     const l = byNum[n];
-    if (!l || labPassed(l) || l.provisioned) continue;
+    if (!l || l.provisioned || passedSinceReset(l)) continue;
     out.add(n);
     queue.push(...l.needs);
   }
@@ -582,36 +585,40 @@ const ICONS = {
 };
 const icon = name => svgEl(`<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`);
 
-// Coverage ring: one arc per exam domain, sized by its exam weight, filled by your progress.
-// The outer ticks are the 31 labs, lit when passed.
-function domainRing(domains, labs) {
+// Readiness ring: one arc per exam domain, sized by its exam weight. Each arc's track is a
+// pale tint of the domain colour, filled in full colour as that domain's labs are passed.
+function domainRing(domains) {
   // Round caps stick out by half the stroke width, so each dash is drawn that much shorter.
-  const c = 125, r = 98, C = 2 * Math.PI * r, gap = 6, w = 12;
+  const c = 110, r = 92, C = 2 * Math.PI * r, gap = 7, w = 16;
   let start = 0;
   const arc = (len, color, extra = "") => `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-dasharray="${len.toFixed(2)} ${C}" stroke-dashoffset="${(-start - w / 2).toFixed(2)}"${extra}/>`;
   const arcs = domains.map((d, i) => {
     const seg = C * d.weight / 100, len = Math.max(0, seg - gap - w);
-    const out = arc(len, "var(--line)") +
-      (d.frac > 0 ? arc(len * d.frac, `var(--d${i + 1})`, ` style="filter: drop-shadow(0 0 6px var(--d${i + 1}))"`) : "");
+    const out = arc(len, `color-mix(in srgb, var(--d${i + 1}) 22%, var(--panel))`) + (d.frac > 0 ? arc(len * d.frac, `var(--d${i + 1})`) : "");
     start += seg;
     return out;
   }).join("");
-  const ticks = labs.map((l, i) => {
-    const [x1, y1] = polar(c, c, 114, i, labs.length), [x2, y2] = polar(c, c, 121, i, labs.length);
-    const on = l.best === 1;
-    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${on ? "var(--k8s)" : "var(--line-2)"}" stroke-width="2.4" stroke-linecap="round"/>`;
-  }).join("");
-  return svgEl(`<svg viewBox="0 0 250 250" role="img" aria-label="Curriculum coverage by exam domain">
-    <g transform="rotate(-90 ${c} ${c})">${arcs}</g>${ticks}</svg>`);
+  return svgEl(`<svg viewBox="0 0 220 220" role="img" aria-label="Exam readiness by domain"><g transform="rotate(-90 ${c} ${c})">${arcs}</g></svg>`);
+}
+
+// A bar per day: how often something was graded. Today is the last bar.
+function activityBars(days) {
+  const max = Math.max(1, ...days.map(d => d.n));
+  return h("div", { class: "spark-bars", role: "img", "aria-label": "Gradings per day, last 14 days" },
+    days.map((d, i) => h("i", { class: (d.n ? "on" : "") + (i === days.length - 1 ? " today" : ""),
+      style: { height: `${d.n ? 25 + (d.n / max) * 75 : 22}%` }, title: `${new Date(d.day + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}: ${d.n} graded` })));
 }
 
 // --- chrome ------------------------------------------------------------------------------------
 
 function renderTop() {
   const top = h("header", { class: "top" },
-    h("a", { class: "brand", href: "#/", title: "Overview" }, h("span", { class: "brand-text" }, "Kubernetes ", h("b", {}, "Playgrounds"))),
+    h("a", { class: "brand", href: "#/", title: "HelmYard: overview" }, h("img", { class: "brand-mark", src: "/static/brand/helmyard-mark-reverse.svg", alt: "" }),
+      h("span", { class: "brand-text" }, h("span", { class: "brand-name" }, "Helm", h("b", {}, "Yard")), h("small", {}, "Kubernetes Playgrounds"))),
     h("nav", { class: "nav" },
+      h("a", { href: "#/kubestronaut", "data-r": "kubestronaut" }, "Kubestronaut"),
       h("a", { href: "#/", "data-r": "labs" }, "Labs"),
+      h("a", { href: "#/drills", "data-r": "drills" }, "Drills"),
       h("a", { href: "#/exams", "data-r": "exams" }, "Exams"),
       h("a", { href: "#/cluster", "data-r": "cluster" }, "Cluster")),
     h("span", { class: "spacer" }),
@@ -703,7 +710,8 @@ function showLogin() {
       } catch (x) { err.textContent = x.message; btn.disabled = false; pw.select(); }
     },
   },
-    h("a", { class: "brand", href: "#/" }, h("span", { class: "brand-text" }, "Kubernetes ", h("b", {}, "Playgrounds"))),
+    h("div", { class: "login-brand" }, h("img", { src: "/static/brand/helmyard-mark.svg", alt: "" }),
+      h("div", { class: "brand-name" }, "Helm", h("b", {}, "Yard")), h("div", { class: "tagline" }, "Kubernetes Playgrounds")),
     h("h1", {}, "Sign in"),
     h("p", {}, "Sign in with the student password to open the labs, the mock exams and a shell on the jump host."),
     h("label", { for: "pw" }, "Password"), pw, btn, err);
@@ -733,6 +741,12 @@ async function route() {
     else if (parts[0] === "lab") { markNav("labs"); await viewLab(main, parts[1], parts[2]); }
     else if (parts[0] === "exam") { markNav("exams"); await viewExam(main, parts[1], parts[2]); }
     else if (parts[0] === "cluster") { markNav("cluster"); await viewCluster(main); }
+    else if (parts[0] === "kubestronaut") { markNav("kubestronaut"); await viewKubestronaut(main); }
+    else if (parts[0] === "track") { markNav("kubestronaut"); await viewTrack(main, parts[1]); }
+    else if (parts[0] === "quiz" && parts[1] === "s") { markNav("kubestronaut"); await viewSitting(main, parts[2], parts[3]); }
+    else if (parts[0] === "quiz") { markNav("kubestronaut"); await viewQuizTrack(main, parts[1]); }
+    else if (parts[0] === "drills") { markNav("drills"); await viewDrills(main); }
+    else if (parts[0] === "drill") { markNav("drills"); await viewDrill(main, parts[1]); }
     else location.hash = "#/";
   } catch (e) {
     if (e.status === 401) return;
@@ -784,6 +798,7 @@ async function viewOverview(main, focus) {
   const graded = labs.filter(l => l.result);
   const checksPass = graded.reduce((a, l) => a + l.result.pass, 0), checksTotal = graded.reduce((a, l) => a + l.result.total, 0);
   const next = labs.find(l => !labPassed(l));
+  const activeDays = (data.activity || []).filter(d => d.n).length;
 
   let filter = store.get("labFilter", "all");
   let query = "";
@@ -833,7 +848,7 @@ async function viewOverview(main, focus) {
       h("div", { class: "hero-text" },
         h("div", { class: "kicker" }, "Certified Kubernetes Administrator (CKA) · Kubernetes v1.35"),
         h("h1", {}, "Hands-on practice for the CKA exam"),
-        h("p", { class: "lead" }, "Kubernetes Playgrounds is a set of ", h("b", {}, "31 labs"), " and ", h("b", {}, "two timed mock exams"),
+        h("p", { class: "lead" }, "HelmYard is a set of ", h("b", {}, "31 labs"), " and ", h("b", {}, "two timed mock exams"),
           " that follow the CKA curriculum. You work on a seven-VM cluster that you build yourself, and every task is graded check by check. As in the exam, there are no hints."),
         h("div", { class: "cta" },
           next ? h("a", { class: "btn solid lg", href: `#/lab/${next.id}` }, next.started_at ? `Resume lab ${next.num}` : `Start lab ${next.num}`, icon("arrow"))
@@ -841,28 +856,52 @@ async function viewOverview(main, focus) {
           h("a", { class: "btn lg", href: "#/exams" }, "Mock exams"))),
       term),
     h("div", { class: "section-head" }, h("h2", {}, icon("chart"), "Your progress")),
-    h("section", { class: "stats" },
-      h("div", { class: "ring-panel hud" },
-        h("div", { class: "head" }, h("span", { class: "label-sm" }, "Curriculum coverage"), h("span", { class: "label-sm muted" }, "by exam weight")),
-        h("div", { class: "ring-row" },
-          h("div", { class: "ring" }, domainRing(perDomain, labs),
-            h("div", { class: "ring-center" }, h("b", {}, coverage, h("small", {}, "%")), h("span", {}, `${passed} of ${labs.length} labs`))),
-          h("div", { class: "legend" }, perDomain.map((d, i) => [
-            h("span", {}, h("span", { class: "sw", style: { background: `var(--d${i + 1})` } }), d.short || d.name),
-            h("span", { class: "n" }, `${d.done}/${d.labs.length}`),
-            h("span", { class: "n" }, `${d.weight}%`)])))),
-      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, icon("lab"), "Labs passed"),
-        h("div", { class: "num" }, passed, h("small", {}, ` / ${labs.length}`)),
-        h("div", { class: "leds", title: "One cell per lab" }, labs.map(l => h("i", { class: labPassed(l) ? "on" : l.best ? "part" : "", title: `Lab ${l.num}` })))),
-      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, icon("chart"), "Checks passing"),
-        h("div", { class: "num" }, checksTotal ? Math.round(checksPass * 100 / checksTotal) : "—", checksTotal ? h("small", {}, " %") : null),
-        h("div", { class: "note" }, checksTotal ? `${checksPass} of ${checksTotal} in ${graded.length} graded lab${graded.length === 1 ? "" : "s"}` : "no lab graded yet"),
+    h("section", { class: "progress" },
+      h("div", { class: "readiness hud" },
+        h("div", { class: "card-head" }, h("div", {}, h("h3", {}, "Exam readiness"), h("p", {}, "Labs passed per exam domain, weighted like the exam")),
+          h("span", { class: "chip" }, "CKA v1.35")),
+        h("div", { class: "readiness-body" },
+          h("div", { class: "ring" }, domainRing(perDomain),
+            h("div", { class: "ring-center" }, h("b", {}, coverage, h("small", {}, "%")), h("span", {}, "ready"))),
+          h("div", { class: "domains" }, perDomain.map((d, i) => h("div", { class: "domain" },
+            h("div", { class: "row" }, h("span", { class: "sw", style: { background: `var(--d${i + 1})` } }), h("span", { class: "name" }, d.short || d.name),
+              h("span", { class: "grow" }), h("span", { class: "n" }, `${d.done}/${d.labs.length} labs`), h("span", { class: "w" }, `${d.weight}%`)),
+            h("div", { class: "track" }, h("i", { style: { width: `${Math.round(d.frac * 100)}%`, background: `var(--d${i + 1})` } }))))))),
+      next ? h("div", { class: "upnext hud" },
+        h("div", { class: "card-head" }, h("div", {}, h("h3", {}, next.started_at ? "Continue where you left off" : "Up next"), h("p", {}, `Lab ${next.num} of ${labs.length}`))),
+        h("div", { class: "upnext-body" },
+          h("div", { class: "meta" }, h("span", { class: "sw", style: { background: `var(--d${DOMAINS.indexOf(domainOf(next.domain)) + 1})` } }), shortDomain(next.domain),
+            next.minutes ? [h("span", { class: "dot-sep" }, "·"), `${next.minutes} min`] : null),
+          h("h4", {}, next.title),
+          h("p", { class: "cur" }, next.curriculum.join(" · "))),
+        h("div", { class: "upnext-actions" },
+          h("a", { class: "btn solid", href: `#/lab/${next.id}` }, next.started_at ? "Continue lab" : "Start lab", icon("arrow")),
+          h("a", { class: "btn quiet", href: "#labs", onclick: e => { e.preventDefault(); $("#labs").scrollIntoView({ behavior: "smooth" }); } }, "All labs")))
+        : h("div", { class: "upnext hud" },
+          h("div", { class: "card-head" }, h("div", {}, h("h3", {}, "All labs passed"), h("p", {}, "Time for a timed mock exam"))),
+          h("div", { class: "upnext-actions" }, h("a", { class: "btn solid", href: "#/exams" }, "Mock exams", icon("arrow")))),
+      h("div", { class: "kpi hud" },
+        h("div", { class: "kpi-head" }, h("span", { class: "kpi-ico" }, icon("lab")), "Labs passed"),
+        h("div", { class: "kpi-num" }, passed, h("small", {}, ` of ${labs.length}`)),
+        h("div", { class: "cells", title: "One square per lab, coloured by domain once passed" }, labs.map(l => {
+          const i = DOMAINS.indexOf(domainOf(l.domain));
+          return h("i", { class: labPassed(l) ? "on" : l.best ? "part" : "", style: labPassed(l) ? { background: `var(--d${i + 1})` } : {}, title: `Lab ${l.num}: ${l.title}` });
+        }))),
+      h("div", { class: "kpi hud" },
+        h("div", { class: "kpi-head" }, h("span", { class: "kpi-ico" }, icon("chart")), "Checks passing"),
+        h("div", { class: "kpi-num" }, checksTotal ? Math.round(checksPass * 100 / checksTotal) : "—", checksTotal ? h("small", {}, "%") : null),
+        h("div", { class: "kpi-note" }, checksTotal ? `${checksPass} of ${checksTotal} in ${graded.length} graded lab${graded.length === 1 ? "" : "s"}` : "No lab graded yet"),
         h("div", { class: "meter" }, h("i", { style: { width: `${checksTotal ? (checksPass / checksTotal) * 100 : 0}%` } }))),
-      h("div", { class: "tile hud" }, h("div", { class: "label-sm" }, icon("exam"), "Best mock exam"),
-        h("div", { class: "num", style: { color: examBest >= 66 ? "var(--pass)" : "" } }, examBest < 0 ? "—" : examBest, examBest < 0 ? null : h("small", {}, " %")),
-        h("div", { class: "note" }, examBest < 0 ? "not attempted yet" : examBest >= 66 ? "above the 66 % pass mark" : "pass mark is 66 %"),
-        h("div", { class: "meter" }, h("i", { style: { width: `${Math.max(0, examBest)}%` } }), h("span", { class: "mark", style: { left: "66%" }, title: "pass mark" }))),
-      h("div", { class: "tile hud", id: "tile-cluster" }, h("div", { class: "label-sm" }, icon("server"), "Cluster"), h("div", { class: "num" }, "…"))),
+      h("div", { class: "kpi hud" },
+        h("div", { class: "kpi-head" }, h("span", { class: "kpi-ico" }, icon("exam")), "Best mock exam"),
+        h("div", { class: "kpi-num", style: { color: examBest >= 66 ? "var(--pass)" : "" } }, examBest < 0 ? "—" : examBest, examBest < 0 ? null : h("small", {}, "%")),
+        h("div", { class: "kpi-note" }, examBest < 0 ? "Not attempted yet" : examBest >= 66 ? "Above the 66% pass mark" : "The pass mark is 66%"),
+        h("div", { class: "meter" }, h("i", { style: { width: `${Math.max(0, examBest)}%`, background: examBest >= 66 ? "var(--pass)" : "var(--k8s)" } }), h("span", { class: "mark", style: { left: "66%" }, title: "pass mark" }))),
+      h("div", { class: "kpi hud" },
+        h("div", { class: "kpi-head" }, h("span", { class: "kpi-ico" }, icon("clock")), "Activity"),
+        h("div", { class: "kpi-num" }, activeDays, h("small", {}, ` day${activeDays === 1 ? "" : "s"}`)),
+        h("div", { class: "kpi-note" }, "with a lab or exam graded, last 14 days"),
+        activityBars(data.activity || []))),
     h("section", { id: "labs" },
       h("div", { class: "section-head" }, h("h2", {}, icon("lab"), "Labs"), h("span", { class: "sub" }, `${passed} of ${labs.length} passed`)),
       h("div", { class: "filterbar hud" }, h("label", { class: "search" }, icon("search"), search), h("span", { class: "fl" }, icon("filter")), filters),
@@ -1069,11 +1108,23 @@ async function viewExam(main, n, mode) {
   const review = !running;
   const tasks = exam.task_list;
   const flagsKey = `exam-${n}-marks`;
-  let marks = { deadline: exam.deadline, flags: [], seen: [] };
+  let marks = { deadline: exam.deadline, flags: [], seen: [], time: {} };
   try {
     const r = await api(`/notes/${flagsKey}`);
     if (r.value && r.value.deadline === exam.deadline) marks = r.value;
   } catch { /* fresh */ }
+  marks.time ||= {};
+  // Time on each task: counted while the task is open and this tab is visible, saved with
+  // the flags, and shown against the task's share of the clock in the results.
+  let shownAt = now();
+  const account = () => {
+    if (review) return;
+    const t = tasks[idx], dt = now() - shownAt;
+    shownAt = now();
+    if (t && dt > 0 && dt < 3600 && document.visibilityState === "visible") marks.time[t.id] = Math.round((marks.time[t.id] || 0) + dt);
+  };
+  const onVis = () => { if (document.visibilityState === "visible") shownAt = now(); else { account(); saveMarks(); } };
+  document.addEventListener("visibilitychange", onVis);
   const saveMarks = () => api(`/notes/${flagsKey}`, { method: "PUT", body: { value: marks } }).catch(() => {});
   let idx = Math.min(tasks.length - 1, Math.max(0, store.get(`exam-${n}-idx`, 0)));
   let tab = "q";
@@ -1104,6 +1155,9 @@ async function viewExam(main, n, mode) {
     if (tab === "pad") { body.replaceChildren(notesEditor(`exam-${n}-notepad`, "Scratch notes, like the notepad in the real exam.")); return; }
     const flagged = marks.flags.includes(t.id);
     body.replaceChildren(...[
+      // Like the real exam: every task starts by switching to its context.
+      h("div", { class: "ctxbar" }, h("span", { class: "label-sm" }, "Context"), h("code", { class: "mono" }, `kubectl config use-context ${t.context}`),
+        h("button", { class: "btn sm", title: "Type it into the terminal (doesn't press Enter)", onclick: () => Terms.paste(`kubectl config use-context ${t.context}`) }, "Paste")),
       renderMarkdown(t.markdown),
       review && t.result ? h("div", {}, h("div", { class: "check-section" }, "Grading"), resultsView(t.result)) : null,
       h("div", { class: "qfoot" },
@@ -1114,6 +1168,7 @@ async function viewExam(main, n, mode) {
     body.scrollTop = 0;
   };
   const go = i => {
+    account();
     idx = i; store.set(`exam-${n}-idx`, i); tab = "q";
     if (!review && !marks.seen.includes(tasks[i].id)) { marks.seen.push(tasks[i].id); saveMarks(); }
     draw();
@@ -1135,12 +1190,14 @@ async function viewExam(main, n, mode) {
       });
       if (!ok) return;
     }
+    account(); await saveMarks();
     await api(`/exams/${n}/submit`, { method: "POST" }).catch(() => {});
     Jobs.start("exam-check", String(n));
   };
 
-  let autoSubmitted = false;
+  let autoSubmitted = false, ticks = 0;
   const tick = () => {
+    if (!review && ++ticks % 30 === 0) { account(); saveMarks(); }
     if (review) {
       const score = exam.result ? `${exam.result.score}%` : "graded";
       clockEl.replaceChildren(h("span", { class: "t" }, score), h("span", { class: "muted" }, "handed in · review"));
@@ -1170,8 +1227,10 @@ async function viewExam(main, n, mode) {
   go(idx);
   tick();
   everyWhileHere(tick, 1000);
-  S.view = () => drawer.dispose();
+  S.view = () => { account(); saveMarks(); document.removeEventListener("visibilitychange", onVis); drawer.dispose(); };
 }
+
+const mins = s => s < 60 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`;
 
 function viewExamBriefing(main, exam) {
   const n = exam.n;
@@ -1238,19 +1297,26 @@ function viewExamBriefing(main, exam) {
   S.view = () => { off(); drawer.dispose(); };
 }
 
-function viewExamResults(main, exam) {
+async function viewExamResults(main, exam) {
   const n = exam.n;
   const r = exam.result;
   const rows = [];
+  let time = {};
+  try { const m = (await api(`/notes/exam-${n}-marks`)).value; if (m && m.deadline === exam.deadline) time = m.time || {}; } catch { /* none */ }
+  const spent = Object.values(time).reduce((a, b) => a + b, 0);
   for (const t of exam.task_list) {
     const f = t.result && t.result.total ? t.result.pass / t.result.total : 0;
-    const detail = h("tr", { class: "hidden" }, h("td", { colspan: 6 }, resultsView(t.result)));
+    const detail = h("tr", { class: "hidden" }, h("td", { colspan: 7 }, resultsView(t.result)));
+    // Its fair share of the clock: weight × exam length.
+    const budget = t.weight / 100 * exam.minutes * 60, used = time[t.id] || 0;
     rows.push(h("tr", { class: "clickable", onclick: () => detail.classList.toggle("hidden") },
       h("td", { class: "n" }, t.id.slice(0, 2)),
       h("td", {}, t.title),
       h("td", { class: "muted" }, shortDomain(t.domain)),
       h("td", { class: "n" }, t.result ? `${t.result.pass}/${t.result.total}` : "—"),
       h("td", { class: "n" }, `${t.weight}%`),
+      h("td", { class: "n", title: `Budget ${mins(budget)} (its weight's share of ${exam.minutes} min)`, style: { color: used > budget * 1.5 ? "var(--fail)" : used > budget ? "var(--warn)" : "" } },
+        used ? `${mins(used)} / ${mins(budget)}` : "—"),
       h("td", { class: "n", style: { color: f === 1 ? "var(--pass)" : f === 0 ? "var(--fail)" : "" } }, `${(t.weight * f).toFixed(1)}%`)), detail);
   }
   const drawer = jobDrawer({ filter: j => j.target === String(n), onEnd: () => route() });
@@ -1263,6 +1329,7 @@ function viewExamResults(main, exam) {
       h("div", {}, h("div", { class: "stat-label" }, "Score"), h("div", { class: "stat", style: { color: r && r.passed ? "var(--pass)" : "var(--fail)" } }, r ? r.score : "—", h("small", {}, " %"))),
       h("div", {}, h("div", { class: "stat-label" }, "Tasks fully solved"), h("div", { class: "stat" },
         exam.task_list.filter(t => t.result && t.result.pass === t.result.total).length, h("small", {}, ` / ${exam.task_list.length}`))),
+      h("div", {}, h("div", { class: "stat-label" }, "Time on tasks"), h("div", { class: "stat" }, spent ? Math.round(spent / 60) : "—", spent ? h("small", {}, ` / ${exam.minutes} min`) : null)),
       h("div", {}, h("div", { class: "stat-label" }, "Sittings"), h("div", { class: "stat" }, exam.history.length))),
     h("div", { class: "actions", style: { marginTop: "20px" } },
       h("a", { class: "btn", href: `#/exam/${n}/review` }, "Review the tasks"),
@@ -1275,10 +1342,286 @@ function viewExamResults(main, exam) {
       }, "Clean up"),
       h("a", { class: "btn", href: "#/cluster" }, `Reset to before-exam${n}…`)),
     h("div", { class: "rack-box hud", style: { marginTop: "16px" } }, h("table", { class: "result-table" },
-      h("thead", {}, h("tr", {}, h("th", {}, "#"), h("th", {}, "Task"), h("th", {}, "Domain"), h("th", { style: { textAlign: "right" } }, "Checks"), h("th", { style: { textAlign: "right" } }, "Weight"), h("th", { style: { textAlign: "right" } }, "Earned"))),
+      h("thead", {}, h("tr", {}, h("th", {}, "#"), h("th", {}, "Task"), h("th", {}, "Domain"), h("th", { style: { textAlign: "right" } }, "Checks"), h("th", { style: { textAlign: "right" } }, "Weight"), h("th", { style: { textAlign: "right" }, title: "Time spent / its share of the clock" }, "Time"), h("th", { style: { textAlign: "right" } }, "Earned"))),
       h("tbody", {}, rows))),
     drawer)));
   S.view = () => drawer.dispose();
+}
+
+// --- Kubestronaut: the five certifications -----------------------------------------------------------
+
+const trackHref = t => t.id === "cka" ? "#/" : t.kind === "quiz" ? `#/quiz/${t.id}` : `#/track/${t.id}`;
+
+function trackStats(t) {
+  if (t.kind === "quiz") {
+    const ready = t.best_exam != null ? t.best_exam : null;
+    return { pct: ready || 0, line: t.bank ? `${t.bank} questions · ${t.sittings} sitting${t.sittings === 1 ? "" : "s"}` : "question bank not installed",
+      big: ready == null ? "—" : `${ready}%`, sub: ready == null ? "no mock exam yet" : ready >= t.pass ? `best mock exam, above the ${t.pass}% pass mark` : `best mock exam; pass mark ${t.pass}%` };
+  }
+  const pct = t.labs ? Math.round(t.labs_passed * 100 / t.labs) : 0;
+  return { pct, line: t.labs ? `${t.labs} labs · ${t.exams} mock exams · ${t.drills} drills` : "labs in preparation",
+    big: t.labs ? `${t.labs_passed}/${t.labs}` : "—", sub: t.labs ? "labs passed" : "curriculum mapped, content coming" };
+}
+
+async function viewKubestronaut(main) {
+  const { tracks } = await api("/tracks");
+  const done = tracks.filter(t => trackStats(t).pct >= 100 || (t.kind === "quiz" && t.best_exam >= t.pass)).length;
+  main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
+    h("section", { class: "hero hero-slim" },
+      h("div", { class: "hero-text" },
+        h("div", { class: "kicker" }, "Kubestronaut"),
+        h("h1", {}, "All five Kubernetes certifications"),
+        h("p", { class: "lead" }, "Kubestronaut is the CNCF title for holding CKA, CKAD, CKS, KCNA and KCSA at the same time. Each track here follows its official curriculum, and every one is harder than the real exam: no hints, tighter clocks, fresh values on every attempt.")),
+      h("div", { class: "kube-count" }, h("b", {}, done), h("span", {}, "of 5 ready"))),
+    h("div", { class: "section-head" }, h("h2", {}, icon("exam"), "Tracks")),
+    h("div", { class: "track-grid" }, tracks.map(t => {
+      const st = trackStats(t);
+      return h("article", { class: `track-card hud ${t.status}` },
+        h("div", { class: "track-top" },
+          h("span", { class: "badge" }, t.short),
+          h("span", { class: "grow" }),
+          h("span", { class: "chip" + (t.status === "ready" ? "" : " muted") }, t.status === "ready" ? (t.kind === "quiz" ? "multiple choice" : "hands-on") : t.kind === "quiz" && t.bank ? "seed bank" : "in preparation")),
+        h("h3", {}, h("a", { href: trackHref(t) }, t.name)),
+        h("p", { class: "cur" }, `${t.kind === "quiz" ? `${t.bank || 0} in the bank, ${t.questions} per exam` : st.line} · ${t.minutes} min exam · pass ${t.pass}%${t.curriculum !== "current" ? ` · v${t.curriculum}` : ""}`),
+        h("div", { class: "track-num" }, h("b", {}, st.big), h("span", {}, st.sub)),
+        h("div", { class: "meter" }, h("i", { style: { width: `${st.pct}%` } })),
+        h("div", { class: "dombar", title: "Exam domains by weight" }, t.domains.map((d, i) => h("i", { style: { flex: d.weight, background: `var(--d${(i % 5) + 1})` }, title: `${d.name} · ${d.weight}%` }))),
+        h("a", { class: "btn" + (t.status === "ready" || t.bank ? " solid" : ""), href: trackHref(t) }, t.id === "cka" ? "Open CKA" : t.kind === "quiz" ? "Practise" : "Roadmap", icon("arrow")));
+    })))));
+}
+
+async function viewTrack(main, id) {
+  const { tracks } = await api("/tracks");
+  const t = tracks.find(x => x.id === id);
+  if (!t) { location.hash = "#/kubestronaut"; return; }
+  main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
+    h("div", { class: "eyebrow" }, h("a", { href: "#/kubestronaut" }, "← Kubestronaut"), h("span", {}, "/"), h("span", { class: "id" }, t.short)),
+    h("h1", { class: "page-title" }, t.name),
+    h("div", { class: "callout" }, h("b", {}, "In preparation. "), `The ${t.short} labs, speed drills and mock exams are being written against curriculum v${t.curriculum}, at the same extreme difficulty as the CKA track. The domains they will cover, with their exam weights:`),
+    h("div", { class: "track-domains" }, t.domains.map((d, i) => h("div", { class: "hud dom-card" },
+      h("div", { class: "row" }, h("span", { class: "sw", style: { background: `var(--d${(i % 5) + 1})` } }), h("b", {}, d.name), h("span", { class: "grow" }), h("span", { class: "w" }, `${d.weight}%`)),
+      h("ul", {}, (d.topics || []).map(x => h("li", {}, x)))))))));
+}
+
+// --- multiple-choice tracks (KCNA, KCSA) ----------------------------------------------------------------
+
+async function viewQuizTrack(main, id) {
+  const [{ tracks }, { history }] = await Promise.all([api("/tracks"), api(`/quiz/${id}/history`)]);
+  const t = tracks.find(x => x.id === id);
+  if (!t) { location.hash = "#/kubestronaut"; return; }
+  const exams = history.filter(x => x.mode === "exam");
+  // Per-domain accuracy over every sitting (practice and exam).
+  const acc = Object.fromEntries(t.domains.map(d => [d.key, [0, 0]]));
+  for (const x of history) for (const [k, [c, n]] of Object.entries(x.domains || {})) if (acc[k]) { acc[k][0] += c; acc[k][1] += n; }
+  const start = async (mode, domain) => {
+    try {
+      const st = await api(`/quiz/${id}/start`, { method: "POST", body: { mode, domain, count: 10 } });
+      location.hash = `#/quiz/s/${st.sid}`;
+    } catch (e) { toast(e.message, true); }
+  };
+  const examMin = Math.round(t.minutes * 0.8);
+  main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
+    h("div", { class: "eyebrow" }, h("a", { href: "#/kubestronaut" }, "← Kubestronaut"), h("span", {}, "/"), h("span", { class: "id" }, t.short)),
+    h("h1", { class: "page-title" }, t.name),
+    h("section", { class: "progress" },
+      h("div", { class: "readiness hud" },
+        h("div", { class: "card-head" }, h("div", {}, h("h3", {}, "Accuracy by domain"), h("p", {}, "Every answered question, practice and mock exams together")), h("span", { class: "chip" }, `${t.bank} questions`)),
+        h("div", { class: "domains", style: { marginTop: "16px" } }, t.domains.map((d, i) => {
+          const [c, n] = acc[d.key];
+          return h("div", { class: "domain" },
+            h("div", { class: "row" }, h("span", { class: "sw", style: { background: `var(--d${(i % 5) + 1})` } }), h("span", { class: "name" }, d.short || d.name),
+              h("span", { class: "grow" }), h("span", { class: "n" }, n ? `${Math.round(c * 100 / n)}% of ${n}` : `${t.by_domain[d.key] || 0} in bank`), h("span", { class: "w" }, `${d.weight}%`),
+              h("button", { class: "btn sm", disabled: !t.by_domain[d.key], onclick: () => start("practice", d.key) }, "Practise")),
+            h("div", { class: "track" }, h("i", { style: { width: `${n ? Math.round(c * 100 / n) : 0}%`, background: `var(--d${(i % 5) + 1})` } })));
+        }))),
+      h("div", { class: "upnext hud" },
+        h("div", { class: "card-head" }, h("div", {}, h("h3", {}, "Mock exam"), h("p", {}, `${t.questions} questions, weighted like the exam`))),
+        h("div", { class: "upnext-body" },
+          h("p", { class: "cur" }, `${examMin} minutes: 20% less than the real exam's ${t.minutes}. Pass mark ${t.pass}%. Multi-select questions don't say how many answers are right. Explanations appear only after you hand in.`),
+          h("div", { class: "track-num" }, h("b", {}, exams.length ? `${Math.max(...exams.map(x => x.score))}%` : "—"), h("span", {}, exams.length ? `best of ${exams.length}` : "not attempted"))),
+        h("div", { class: "upnext-actions" },
+          h("button", { class: "btn solid", disabled: !t.bank, onclick: () => start("exam") }, "Start mock exam", icon("arrow")),
+          h("button", { class: "btn quiet", disabled: !t.bank, onclick: () => start("practice") }, "10 random")))),
+    h("div", { class: "section-head" }, h("h2", {}, icon("chart"), "Sittings")),
+    history.length ? h("div", { class: "rack-box hud" }, h("table", { class: "result-table" },
+      h("thead", {}, h("tr", {}, ["When", "Mode", "Questions", "Score", ""].map(x => h("th", {}, x)))),
+      h("tbody", {}, history.slice().reverse().map(x => h("tr", { class: "clickable", onclick: () => { location.hash = `#/quiz/s/${x.sid}/review`; } },
+        h("td", {}, ago(x.at)), h("td", {}, x.mode === "exam" ? "Mock exam" : `Practice${x.domain ? ` · ${(t.domains.find(d => d.key === x.domain) || {}).short || x.domain}` : ""}`),
+        h("td", { class: "n" }, `${x.correct}/${x.total}`),
+        h("td", { class: "n", style: { color: x.passed ? "var(--pass)" : "var(--fail)" } }, `${x.score}%`),
+        h("td", { class: "n" }, "Review →"))))))
+      : h("div", { class: "empty" }, "No sittings yet. Start with a domain you know least."))));
+}
+
+async function viewSitting(main, sid, mode) {
+  let st = await api(`/quiz/sittings/${sid}`);
+  const skew = st.now * 1000 - Date.now();
+  let idx = 0;
+  const done = () => !!st.submitted_at;
+  const body = h("div", { class: "doc-body quiz-body" });
+  const nav = h("div", { class: "navgrid" });
+  const clockEl = h("div", { class: "clock" });
+  const save = (qid, payload) => api(`/quiz/sittings/${sid}/answer`, { method: "PUT", body: { qid, ...payload } }).catch(e => toast(e.message, true));
+  const submit = async (auto = false) => {
+    if (!auto) {
+      const open = st.items.filter(x => !x.chosen.length).length;
+      if (!(await dialog({ title: "Hand in?", body: [p("Your answers are graded now."), open ? p(`${open} question${open > 1 ? "s" : ""} unanswered.`) : null], confirm: "Hand in" }))) return;
+    }
+    st = await api(`/quiz/sittings/${sid}/submit`, { method: "POST" });
+    draw();
+  };
+  const drawNav = () => nav.replaceChildren(...st.items.map((x, i) => h("button", {
+    class: [i === idx ? "on" : "", x.flagged ? "flag" : "", x.chosen.length ? "seen" : "", done() ? (x.right ? "ok" : "zero") : ""].join(" "),
+    onclick: () => { idx = i; draw(); } }, i + 1)));
+  const drawQuestion = () => {
+    const x = st.items[idx];
+    const opts = x.options.map((o, i) => {
+      const chosen = x.chosen.includes(i), correct = done() && x.correct.includes(i);
+      const input = h("input", { type: x.multi ? "checkbox" : "radio", name: "opt", checked: chosen, disabled: done(),
+        onchange: () => {
+          x.chosen = x.multi ? (input.checked ? [...x.chosen, i] : x.chosen.filter(c => c !== i)).sort() : [i];
+          save(x.qid, { choice: x.chosen }); drawNav();
+        } });
+      return h("label", { class: "opt" + (done() ? (correct ? " correct" : chosen ? " wrong" : "") : chosen ? " chosen" : "") }, input, h("span", { class: "md-inline" }, inlineMd(o)));
+    });
+    body.replaceChildren(...[
+      h("div", { class: "qhead" }, h("span", { class: "label-sm" }, `Question ${idx + 1} of ${st.items.length}`), h("span", { class: "grow" }),
+        x.multi ? h("span", { class: "chip" }, "Select all that apply") : null),
+      renderMarkdown(x.stem),
+      h("div", { class: "opts" }, opts),
+      done() ? h("div", { class: "explain" + (x.right ? " ok" : " no") },
+        h("b", {}, x.right ? "Correct. " : "Not quite. "), renderMarkdown(x.explain),
+        x.refs.length ? h("div", { class: "refs" }, x.refs.map(r => h("a", { href: r, target: "_blank", rel: "noopener" }, r.replace(/^https?:\/\//, "")))) : null) : null,
+      h("div", { class: "qfoot" },
+        h("button", { class: "btn", disabled: idx === 0, onclick: () => { idx--; draw(); } }, "← Previous"),
+        done() ? null : h("button", { class: "btn" + (x.flagged ? " solid" : ""), onclick: () => { x.flagged = !x.flagged; save(x.qid, { flag: x.flagged }); draw(); } }, x.flagged ? "Flagged" : "Flag for review"),
+        h("span", { class: "grow" }),
+        idx < st.items.length - 1 ? h("button", { class: "btn", onclick: () => { idx++; draw(); } }, "Next →")
+          : done() ? null : h("button", { class: "btn solid", onclick: () => submit(false) }, "Hand in"))].filter(Boolean));
+  };
+  const drawResult = () => {
+    const r = st.result;
+    const t = (S.tracks || []).find(x => x.id === st.track);
+    return h("div", { class: "quiz-result hud" },
+      h("div", {}, h("div", { class: "stat-label" }, "Score"), h("div", { class: "stat", style: { color: r.passed ? "var(--pass)" : "var(--fail)" } }, r.score, h("small", {}, "%"))),
+      h("div", {}, h("div", { class: "stat-label" }, "Correct"), h("div", { class: "stat" }, r.correct, h("small", {}, ` / ${r.total}`))),
+      h("div", {}, h("div", { class: "stat-label" }, "Time"), h("div", { class: "stat" }, Math.round(r.seconds / 60), h("small", {}, " min"))),
+      h("div", { class: "quiz-domains" }, Object.entries(r.domains).map(([k, [c, n]]) => h("div", { class: "domain" },
+        h("div", { class: "row" }, h("span", { class: "name" }, (t && (t.domains.find(d => d.key === k) || {}).short) || k), h("span", { class: "grow" }), h("span", { class: "n" }, `${c}/${n}`)),
+        h("div", { class: "track" }, h("i", { style: { width: `${Math.round(c * 100 / n)}%`, background: c / n >= (r.pass_mark / 100) ? "var(--pass)" : "var(--warn)" } }))))));
+  };
+  let ticks = 0;
+  const tick = () => {
+    if (done()) { clockEl.replaceChildren(h("span", { class: "t" }, `${st.result.score}%`), h("span", { class: "muted" }, st.result.passed ? "passed" : `needs ${st.result.pass_mark}%`)); return; }
+    if (!st.deadline) { clockEl.replaceChildren(h("span", { class: "t" }, clock(((Date.now() + skew) / 1000) - st.created)), h("span", { class: "muted" }, "practice")); return; }
+    const left = st.deadline - (Date.now() + skew) / 1000;
+    clockEl.className = "clock" + (left < 300 ? " low" : "");
+    clockEl.replaceChildren(h("span", { class: "t" }, clock(left)), h("span", { class: "muted" }, "left"));
+    if (left <= 0 && !ticks++) { toast("Time is up. Handing in."); submit(true); }
+  };
+  const draw = () => { drawNav(); drawQuestion(); tick(); head.replaceChildren(...headParts().filter(Boolean)); };
+  const head = h("div", { class: "quiz-head" });
+  const headParts = () => [
+    h("div", { class: "eyebrow" }, h("a", { href: `#/quiz/${st.track}` }, `← ${st.track.toUpperCase()}`), h("span", {}, "/"), h("span", { class: "id" }, st.mode === "exam" ? "mock exam" : "practice")),
+    h("div", { style: { display: "flex", alignItems: "center", gap: "14px", marginTop: "12px" } }, clockEl, h("span", { style: { flex: 1 } }),
+      done() ? h("a", { class: "btn", href: `#/quiz/${st.track}` }, "Done") : h("button", { class: "btn solid", onclick: () => submit(false) }, "Hand in")),
+    done() ? drawResult() : null,
+    nav];
+  if (!S.tracks) api("/tracks").then(r => { S.tracks = r.tracks; if (done()) draw(); }).catch(() => {});
+  main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap quiz-wrap" }, head, h("section", { class: "doc hud" }, body))));
+  draw();
+  everyWhileHere(tick, 1000);
+}
+
+// --- speed drills ------------------------------------------------------------------------------------
+
+const domainVar = key => { const i = DOMAINS.indexOf(domainOf(key)); return i < 0 ? "var(--muted)" : `var(--d${i + 1})`; };
+
+async function viewDrills(main) {
+  const { drills } = await api("/drills");
+  const runs = drills.reduce((a, d) => a + d.attempts, 0);
+  const inside = drills.filter(d => d.best != null && d.best <= d.seconds).length;
+  const card = d => {
+    const state = d.best == null ? "" : d.best <= d.seconds ? "passed" : "graded";
+    return h("article", { class: `lab-card drill-card hud ${state}` },
+      h("header", {}, icon("clock"), h("span", {}, shortDomain(d.domain)), h("i", { class: "dom", style: { background: domainVar(d.domain) } }),
+        h("span", { class: "grow" }), h("span", { class: "min" }, `${clock(d.seconds)} budget`)),
+      h("div", { class: "body" },
+        h("h3", {}, h("a", { href: `#/drill/${d.id}` }, h("span", { class: "no" }, d.num), d.title)),
+        h("div", { class: "tags" }, d.needs.length ? h("span", { class: "tag" }, `needs ${d.needs.join(", ")}`) : null,
+          d.attempts ? h("span", { class: "tag" }, `${d.attempts} run${d.attempts > 1 ? "s" : ""}`) : h("span", { class: "tag" }, "not tried"))),
+      h("footer", {},
+        h("div", { class: "prog" }, h("span", { class: "label-sm" }, "Best time"),
+          h("span", { class: "val" }, d.best == null ? "—" : `${clock(d.best)}${d.best <= d.seconds ? "" : " (over budget)"}`),
+          h("span", { class: "bar" }, h("i", { style: { width: `${d.best == null ? 0 : Math.min(100, (d.seconds / d.best) * 100)}%` } }))),
+        h("a", { class: "btn", href: `#/drill/${d.id}` }, d.started ? "Continue" : "Open")));
+  };
+  main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
+    h("div", { class: "section-head", style: { marginTop: 0 } }, h("h2", {}, icon("clock"), "Speed drills"),
+      h("span", { class: "sub" }, `${inside} of ${drills.length} inside the budget · ${runs} run${runs === 1 ? "" : "s"}`)),
+    h("div", { class: "callout" }, h("b", {}, "One task, a tight clock. "),
+      "Budgets are shorter than the real exam allows. Every start draws new names and numbers, so you can't memorise answers. The clock runs until every check passes."),
+    h("div", { class: "actions", style: { margin: "0 0 18px" } },
+      h("button", { class: "btn solid", onclick: () => { const d = drills[Math.floor(Math.random() * drills.length)]; location.hash = `#/drill/${d.id}`; } }, "Random drill", icon("arrow"))),
+    h("div", { class: "lab-grid" }, drills.map(card)))));
+}
+
+async function viewDrill(main, id) {
+  let d = await api(`/drills/${id}`);
+  let skew = d.now * 1000 - Date.now();
+  const doc = h("section", { class: "doc" });
+  const body = h("div", { class: "doc-body" });
+  const clockEl = h("div", { class: "clock" });
+  const actions = h("div", { class: "actions" });
+  const reload = async () => { d = await api(`/drills/${id}`); skew = d.now * 1000 - Date.now(); draw(); };
+  const drawer = jobDrawer({ filter: j => j.target === d.id || j.target === d.num, onEnd: async info => {
+    await reload();
+    if (info.action === "drill-check" && d.result) {
+      const t = d.last ? clock(d.last.seconds) : "";
+      toast(d.result.pass === d.result.total ? `All checks pass in ${t}${d.last && d.last.seconds > d.seconds ? " (over budget)" : ""}` : `${d.result.pass}/${d.result.total} checks · the clock keeps running`);
+    }
+  } });
+  const busy = () => !!S.jobs.current;
+  const startBtn = h("button", { class: "btn" }, "Start");
+  startBtn.onclick = async () => {
+    if (d.started && !(await dialog({ title: "Start again?", body: p("This draws new values and resets the clock. The current attempt is abandoned."), confirm: "Start over" }))) return;
+    Jobs.start("drill-start", d.id);
+  };
+  const checkBtn = h("button", { class: "btn solid", onclick: () => Jobs.start("drill-check", d.id) }, "Check");
+  const cleanBtn = h("button", { class: "btn", onclick: () => Jobs.start("drill-cleanup", d.id) }, "Clean up");
+  actions.append(startBtn, checkBtn, cleanBtn);
+  const sync = () => { startBtn.disabled = busy(); checkBtn.disabled = busy() || !d.started; cleanBtn.disabled = busy(); };
+  const offJobs = Jobs.on(sync);
+  const tick = () => {
+    if (!d.started) { clockEl.className = "clock"; clockEl.replaceChildren(h("span", { class: "t" }, clock(d.seconds)), h("span", { class: "muted" }, "budget")); return; }
+    const done = d.result && d.result.pass === d.result.total && d.last;
+    const used = done ? d.last.seconds : (Date.now() + skew) / 1000 - d.started;
+    clockEl.className = "clock" + (used > d.seconds ? " low" : "");
+    clockEl.replaceChildren(h("span", { class: "t" }, clock(used)), h("span", { class: "muted" }, done ? "done" : `of ${clock(d.seconds)}`));
+  };
+  const draw = () => {
+    body.replaceChildren(...[
+      d.started ? renderMarkdown(d.markdown) : h("div", { class: "empty" }, h("b", {}, "Press Start. "),
+        "Setup takes a few seconds; the task appears and the clock starts as soon as it's ready."),
+      d.result ? h("div", {}, h("div", { class: "check-section" }, "Last check"), resultsView(d.result)) : null,
+      d.history.length ? h("div", {}, h("div", { class: "check-section" }, "Your times"),
+        h("div", { class: "spark-bars drill-times" }, d.history.map(r => h("i", {
+          class: r.pass === r.total ? "on" : "", title: `${clock(r.seconds)} · ${r.pass}/${r.total} · ${ago(r.at)}`,
+          style: { height: `${Math.max(12, Math.min(100, (r.seconds / (d.seconds * 2)) * 100))}%`, background: r.pass === r.total ? (r.seconds <= d.seconds ? "var(--pass)" : "var(--warn)") : "var(--strip)" } })))) : null].filter(Boolean));
+    sync(); tick();
+  };
+  doc.append(
+    h("div", { class: "doc-head" },
+      h("div", { class: "eyebrow" }, h("a", { href: "#/drills" }, "← drills"), h("span", {}, "/"), h("span", { class: "id" }, `drill ${d.num}`), h("span", {}, "·"), h("span", {}, shortDomain(d.domain))),
+      h("h1", {}, d.title),
+      h("div", { style: { display: "flex", alignItems: "center", gap: "14px", marginTop: "10px" } }, clockEl, h("span", { style: { flex: 1 } }), actions)),
+    body, drawer);
+  const ws = h("div", { class: "workspace" }, doc, gutter(doc, "drillDocWidth"));
+  main.replaceChildren(ws);
+  Terms.mount(ws);
+  draw();
+  everyWhileHere(tick, 1000);
+  S.view = () => { offJobs(); drawer.dispose(); };
 }
 
 // --- cluster and snapshots ---------------------------------------------------------------------------------
@@ -1319,24 +1662,31 @@ async function viewCluster(main) {
     snaps.replaceChildren(...r.snapshots.map(s => h("tr", {},
       h("td", { class: "name" }, s.name),
       h("td", { class: "m" }, s.time ? new Date(s.time * 1000).toLocaleString() : "", h("span", { class: "muted" }, s.time ? ` · ${ago(s.time)}` : "")),
-      h("td", { class: "m" }, s.complete ? `all ${s.vms.length}` : h("span", { style: { color: "var(--warn)" } }, `${s.vms.length}/${r.vm_count}`)),
+      h("td", { class: "m" }, !s.complete ? h("span", { style: { color: "var(--warn)" } }, `${s.vms.length}/${r.vm_count}`)
+        : s.jump_state ? h("span", { title: "Node VMs, plus the jump host's lab state saved as a file" }, `${s.vms.filter(v => v !== "jump").length} nodes + jump`) : `all ${s.vms.length}`),
       h("td", { style: { textAlign: "right", whiteSpace: "nowrap" } },
         s.name === "base" ? null : h("button", { class: "btn sm quiet", disabled: busy, onclick: () => deleteSnap(s.name) }, "Delete"), " ",
-        h("button", { class: "btn sm danger", disabled: busy || !s.complete, onclick: () => resetTo(s.name) }, "Reset to this")))));
+        h("button", { class: "btn sm danger", disabled: busy || !s.complete, onclick: () => resetTo(s) }, "Reset to this")))));
     if (!r.snapshots.length) snaps.append(h("tr", {}, h("td", { colspan: 4, class: "muted" }, "No snapshots.")));
   };
 
-  const resetTo = async name => {
+  const resetTo = async snap => {
+    const name = snap.name;
+    // Snapshots with the jump host's lab state saved as a file leave the jump VM running.
     const ok = await dialog({
-      title: `Reset everything to "${name}"?`,
-      body: [p("Every lab VM, including the jump host, rolls back. All work since that snapshot is lost: cluster state, files, lab progress and open shells."),
-        p("This page disconnects and reconnects by itself in a minute or two."),
-        p("Type the snapshot name to confirm.")],
+      title: `Reset the cluster to "${name}"?`,
+      body: snap.jump_state
+        ? [p("The six node VMs roll back, and the lab files and tools on the jump host (kubeconfig, Helm, HAProxy, files in your home directory) go back to how they were. Cluster changes since that snapshot are lost."),
+          p("Your grades, exam history and notes are kept, and this page stays connected."),
+          p("Type the snapshot name to confirm.")]
+        : [p("This snapshot is older and includes the jump host itself, so every lab VM rolls back. All work since is lost: cluster state, files, grades and open shells."),
+          p("This page disconnects and reconnects by itself in a minute or two."),
+          p("Type the snapshot name to confirm.")],
       confirm: "Reset", danger: true, typed: name,
     });
     if (!ok) return;
     const j = await Jobs.start("reset", name);
-    if (j) waitForReturn(`Rolling back to ${name}`);
+    if (j && !snap.jump_state) waitForReturn(`Rolling back to ${name}`);
   };
 
   const deleteSnap = async name => {
@@ -1351,7 +1701,7 @@ async function viewCluster(main) {
     if (!/^[A-Za-z][A-Za-z0-9_-]{1,39}$/.test(name) || name === "base") { toast("Use letters, digits, - and _, starting with a letter (not \"base\").", true); return; }
     const ok = await dialog({
       title: `Snapshot as "${name}"?`,
-      body: [p("The five Kubernetes nodes and the NFS server shut down so etcd is captured consistently across all three members, then start again. Allow about three minutes."),
+      body: [p("The five Kubernetes nodes and the NFS server shut down so etcd is captured consistently across all three members, then start again. The lab files and tools on the jump host are saved with it. Allow about three minutes."),
         p("An existing snapshot with this name is replaced.")],
       confirm: "Take snapshot",
     });

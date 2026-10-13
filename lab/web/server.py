@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""lab-web: Kubernetes Playgrounds, the browser console for the CKA lab.
+"""lab-web: HelmYard (Kubernetes Playgrounds), the browser console for the lab.
 
 Runs on the jump host as `student` (systemd unit lab-web.service) and serves:
 
@@ -21,6 +21,7 @@ Configuration comes from the environment (/etc/cka-lab/web.env):
 """
 
 import asyncio
+import datetime
 import base64
 import fcntl
 import hashlib
@@ -30,6 +31,7 @@ import os
 import pty
 import re
 import secrets
+import shlex
 import signal
 import ssl
 import struct
@@ -46,6 +48,7 @@ LAB_SOLUTIONS = Path(os.environ.get("LAB_SOLUTIONS", "/opt/cka-lab-solutions"))
 LAB_BIN = os.environ.get("LAB_BIN", "/usr/local/bin/lab")
 STATIC = Path(__file__).resolve().parent / "static"
 WEB_STATE = LAB_STATE / "web"
+JUMP_SNAPS = Path("/var/lib/cka-lab/snapshots")   # the jump host's lab state per snapshot (lab bin)
 PVE_ENV = Path("/etc/cka-lab/pve.env")
 LAB_ENV = Path("/etc/cka-lab/lab.env")
 
@@ -107,6 +110,27 @@ def find_lab(lab_id: str) -> Path:
         if d.name == lab_id or d.name.split("-", 1)[0] == lab_id:
             return d
     raise web.HTTPNotFound(text="no such lab")
+
+
+def lab_params(grade_id: str) -> dict:
+    """This attempt's randomised values (lab bin draw_params), or {} before the lab is started."""
+    out = {}
+    try:
+        for line in (LAB_STATE / "params" / f"{grade_id}.env").read_text().splitlines():
+            k, sep, v = line.partition("=")
+            if sep and re.fullmatch(r"[A-Z_][A-Z0-9_]*", k):
+                out[k] = (shlex.split(v) or [""])[0]
+    except (FileNotFoundError, ValueError):
+        pass
+    return out
+
+
+def render_params(md: str, values: dict, has_spec: bool) -> str:
+    """{{KEY}} -> the value; before the lab is started, a visible placeholder."""
+    def sub(m):
+        k = m.group(1)
+        return values[k] if k in values else (f"‹{k.lower()}›" if has_spec else m.group(0))
+    return re.sub(r"\{\{([A-Z_][A-Z0-9_]*)\}\}", sub, md)
 
 
 def lab_summary(d: Path, history: list) -> dict:
@@ -172,6 +196,258 @@ def exam_summary(d: Path) -> dict:
     return {"n": d.name, "title": title, "tasks": len(tasks), "minutes": EXAM_MINUTES,
             "pass_mark": EXAM_PASS, "needs": read_meta(d / "meta").get("NEEDS", "").split(),
             **exam_state(d.name)}
+
+
+# --- speed drills ---------------------------------------------------------------------
+
+def drill_dirs() -> list:
+    base = LAB_HOME / "drills"
+    return sorted(d for d in base.iterdir() if d.is_dir() and ID_RE.match(d.name)) if base.exists() else []
+
+
+def find_drill(drill_id: str) -> Path:
+    for d in drill_dirs():
+        if d.name == drill_id or d.name.split("-", 1)[0] == drill_id:
+            return d
+    raise web.HTTPNotFound(text="no such drill")
+
+
+def drill_summary(d: Path, history: list) -> dict:
+    meta = read_meta(d / "meta")
+    gid = f"drill-{d.name}"
+    runs = [h for h in history if h.get("id") == gid]
+    passes = [h["seconds"] for h in runs if h.get("total") and h.get("pass") == h.get("total")]
+    start = LAB_STATE / "drills" / f"{gid}.start"
+    budget = int(meta["SECONDS"]) if meta.get("SECONDS", "").isdigit() else None
+    return {
+        "id": d.name, "num": d.name.split("-", 1)[0], "title": meta.get("TITLE", d.name),
+        "domain": meta.get("DOMAIN", ""), "seconds": budget,
+        "needs": [n for n in meta.get("NEEDS", "").split() if n],
+        "best": min(passes) if passes else None, "attempts": len(runs),
+        "inside": sum(1 for s in passes if budget and s <= budget),
+        "last": runs[-1] if runs else None,
+        "started": int(start.read_text().strip() or 0) if start.exists() else None,
+    }
+
+
+async def api_drills(request):
+    history = read_jsonl(LAB_STATE / "drill-history.jsonl")
+    return web.json_response({"drills": [drill_summary(d, history) for d in drill_dirs()], "now": int(time.time())})
+
+
+async def api_drill(request):
+    d = find_drill(request.match_info["id"])
+    history = read_jsonl(LAB_STATE / "drill-history.jsonl")
+    out = drill_summary(d, history)
+    gid = f"drill-{d.name}"
+    out["markdown"] = render_params((d / "task.md").read_text(), lab_params(gid), True)
+    out["result"] = read_json(LAB_STATE / "results" / f"{gid}.json") if out["started"] else None
+    out["history"] = [h for h in history if h.get("id") == gid][-20:]
+    out["now"] = int(time.time())
+    return web.json_response(out)
+
+
+# --- Kubestronaut tracks and the quiz engine (KCNA, KCSA) -----------------------------------
+#
+# lab/tracks.json describes the five certifications. Multiple-choice tracks draw from
+# question banks in the private solutions repo (questions/<track>/*.json), so answers
+# never reach the public repo, and the browser only gets them after a sitting is handed
+# in. A sitting is a file under WEB_STATE/quiz: the question order, each question's
+# option shuffle, the answers so far, the deadline.
+
+TRACKS_FILE = LAB_HOME / "tracks.json"
+QUIZ_DIR = LAB_SOLUTIONS / "questions"
+QUIZ_STATE = WEB_STATE / "quiz"
+SID_RE = re.compile(r"^[0-9a-f]{12}$")
+QUIZ_TIME_FACTOR = 0.8   # mock exams get 20% less time than the real one: harder on purpose
+
+
+def tracks() -> list:
+    try:
+        return json.loads(TRACKS_FILE.read_text())["tracks"]
+    except (FileNotFoundError, KeyError, ValueError):
+        return []
+
+
+def find_track(track_id: str) -> dict:
+    for t in tracks():
+        if t["id"] == track_id:
+            return t
+    raise web.HTTPNotFound(text="no such track")
+
+
+def question_bank(track_id: str) -> list:
+    out = []
+    for f in sorted((QUIZ_DIR / track_id).glob("*.json")) if (QUIZ_DIR / track_id).is_dir() else []:
+        try:
+            out += json.loads(f.read_text())
+        except ValueError:
+            continue
+    return [q for q in out if q.get("id") and q.get("options") and q.get("answer")]
+
+
+def quiz_history(track_id: str) -> list:
+    return [h for h in read_jsonl(LAB_STATE / "quiz-history.jsonl") if h.get("track") == track_id]
+
+
+async def api_tracks(request):
+    history = read_jsonl(LAB_STATE / "history.jsonl")
+    out = []
+    for t in tracks():
+        t = dict(t)
+        if t["kind"] == "quiz":
+            bank = question_bank(t["id"])
+            hist = quiz_history(t["id"])
+            exams = [h["score"] for h in hist if h.get("mode") == "exam"]
+            t.update(bank=len(bank), sittings=len(hist), best_exam=max(exams) if exams else None,
+                     by_domain={d["key"]: sum(1 for q in bank if q.get("domain") == d["key"]) for d in t["domains"]})
+        else:
+            root = LAB_HOME / t.get("root", ".")
+            labs = sorted(d for d in (root / "labs").iterdir() if d.is_dir() and ID_RE.match(d.name)) if (root / "labs").is_dir() else []
+            passed = sum(1 for d in labs if any(h.get("id") == d.name and h.get("total") and h["pass"] == h["total"] for h in history))
+            t.update(labs=len(labs), labs_passed=passed,
+                     exams=len([d for d in (root / "exams").iterdir() if d.is_dir()]) if (root / "exams").is_dir() else 0,
+                     drills=len([d for d in (root / "drills").iterdir() if d.is_dir()]) if (root / "drills").is_dir() else 0)
+        out.append(t)
+    return web.json_response({"tracks": out})
+
+
+def sitting_path(sid: str) -> Path:
+    if not SID_RE.match(sid):
+        raise web.HTTPNotFound(text="no such sitting")
+    return QUIZ_STATE / f"{sid}.json"
+
+
+def load_sitting(sid: str) -> dict:
+    try:
+        return json.loads(sitting_path(sid).read_text())
+    except FileNotFoundError:
+        raise web.HTTPNotFound(text="no such sitting")
+
+
+def save_sitting(st: dict):
+    QUIZ_STATE.mkdir(parents=True, exist_ok=True)
+    tmp = QUIZ_STATE / f".{st['sid']}.tmp"
+    tmp.write_text(json.dumps(st))
+    tmp.replace(sitting_path(st["sid"]))
+
+
+def sitting_view(st: dict) -> dict:
+    """What the browser may see: answers and explanations only once it's handed in."""
+    bank = {q["id"]: q for q in question_bank(st["track"])}
+    done = st.get("submitted_at") is not None
+    items = []
+    for it in st["items"]:
+        q = bank.get(it["qid"])
+        if not q:
+            continue
+        perm = it["perm"]                     # display position -> original option index
+        view = {"qid": q["id"], "domain": q.get("domain"), "multi": len(q["answer"]) > 1 or q.get("type") == "multi",
+                "stem": q["stem"], "options": [q["options"][i] for i in perm],
+                "chosen": st["answers"].get(q["id"], []), "flagged": q["id"] in st.get("flags", [])}
+        if done:
+            view.update(correct=[perm.index(i) for i in q["answer"]], explain=q.get("explain", ""), refs=q.get("refs", []),
+                        right=sorted(perm[i] for i in st["answers"].get(q["id"], [])) == sorted(q["answer"]))
+        items.append(view)
+    return {k: st.get(k) for k in ("sid", "track", "mode", "domain", "created", "deadline", "submitted_at", "result")} | \
+        {"items": items, "now": int(time.time())}
+
+
+async def api_quiz_start(request):
+    t = find_track(request.match_info["track"])
+    if t["kind"] != "quiz":
+        raise web.HTTPBadRequest(text="not a multiple-choice track")
+    body = await request.json() if request.can_read_body else {}
+    mode = "exam" if body.get("mode") == "exam" else "practice"
+    bank = question_bank(t["id"])
+    rng = secrets.SystemRandom()
+    if mode == "exam":
+        # Like the real exam: questions spread over the domains by weight.
+        want = int(t.get("questions", 60))
+        picked = []
+        for d in t["domains"]:
+            pool = [q for q in bank if q.get("domain") == d["key"]]
+            picked += rng.sample(pool, min(len(pool), round(want * d["weight"] / 100)))
+        rng.shuffle(picked)
+        deadline = int(time.time() + t["minutes"] * 60 * QUIZ_TIME_FACTOR * len(picked) / max(1, want))
+        domain = None
+    else:
+        domain = body.get("domain") or None
+        pool = [q for q in bank if domain is None or q.get("domain") == domain]
+        picked = rng.sample(pool, min(len(pool), max(1, min(int(body.get("count") or 10), 60))))
+        deadline = None
+    if not picked:
+        raise web.HTTPConflict(text="no questions installed for this track yet")
+    items = []
+    for q in picked:
+        perm = list(range(len(q["options"])))
+        if not q.get("keep_order"):
+            rng.shuffle(perm)
+        items.append({"qid": q["id"], "perm": perm})
+    st = {"sid": secrets.token_hex(6), "track": t["id"], "mode": mode, "domain": domain, "created": int(time.time()),
+          "deadline": deadline, "items": items, "answers": {}, "flags": [], "submitted_at": None, "result": None}
+    save_sitting(st)
+    return web.json_response(sitting_view(st))
+
+
+async def api_quiz_sitting(request):
+    return web.json_response(sitting_view(load_sitting(request.match_info["sid"])))
+
+
+async def api_quiz_answer(request):
+    st = load_sitting(request.match_info["sid"])
+    if st.get("submitted_at"):
+        raise web.HTTPConflict(text="already handed in")
+    if st.get("deadline") and time.time() > st["deadline"] + 5:
+        raise web.HTTPConflict(text="time is up")
+    body = await request.json()
+    qid = str(body.get("qid", ""))
+    it = next((i for i in st["items"] if i["qid"] == qid), None)
+    if not it:
+        raise web.HTTPBadRequest(text="not in this sitting")
+    if "choice" in body:
+        st["answers"][qid] = sorted({int(c) for c in body["choice"] if 0 <= int(c) < len(it["perm"])})
+    if "flag" in body:
+        flags = set(st.get("flags", []))
+        (flags.add if body["flag"] else flags.discard)(qid)
+        st["flags"] = sorted(flags)
+    save_sitting(st)
+    return web.json_response({"ok": True})
+
+
+async def api_quiz_submit(request):
+    st = load_sitting(request.match_info["sid"])
+    if not st.get("submitted_at"):
+        t = find_track(st["track"])
+        bank = {q["id"]: q for q in question_bank(st["track"])}
+        per: dict = {}
+        right = 0
+        for it in st["items"]:
+            q = bank.get(it["qid"])
+            if not q:
+                continue
+            ok = sorted(it["perm"][i] for i in st["answers"].get(q["id"], [])) == sorted(q["answer"])
+            right += ok
+            c = per.setdefault(q.get("domain", "?"), [0, 0])
+            c[0] += ok
+            c[1] += 1
+        total = len(st["items"])
+        score = round(right * 100 / total) if total else 0
+        st["submitted_at"] = int(time.time())
+        st["result"] = {"correct": right, "total": total, "score": score, "pass_mark": t["pass"],
+                        "passed": score >= t["pass"], "domains": per,
+                        "seconds": st["submitted_at"] - st["created"]}
+        save_sitting(st)
+        LAB_STATE.mkdir(parents=True, exist_ok=True)
+        with open(LAB_STATE / "quiz-history.jsonl", "a") as f:
+            f.write(json.dumps({"track": st["track"], "mode": st["mode"], "domain": st["domain"], "sid": st["sid"],
+                                "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")} | st["result"]) + "\n")
+    return web.json_response(sitting_view(st))
+
+
+async def api_quiz_history(request):
+    t = find_track(request.match_info["track"])
+    return web.json_response({"history": quiz_history(t["id"])[-50:]})
 
 
 # --- auth ---------------------------------------------------------------------------
@@ -269,13 +545,29 @@ async def health(request):
 
 # --- labs and exams API -----------------------------------------------------------------
 
+def activity(history: list, exams: list, days: int = 14) -> list:
+    """Gradings per day (lab checks and mock exams) for the last `days` days, oldest first."""
+    today = datetime.date.today()
+    counts = {today - datetime.timedelta(days=i): 0 for i in range(days)}
+    for h in history + exams:
+        try:
+            day = datetime.datetime.fromisoformat(str(h.get("at", "")).replace("Z", "+00:00")).astimezone().date()
+        except ValueError:
+            continue
+        if day in counts:
+            counts[day] += 1
+    return [{"day": d.isoformat(), "n": counts[d]} for d in sorted(counts)]
+
+
 async def api_overview(request):
     history = read_jsonl(LAB_STATE / "history.jsonl")
     return web.json_response({
+        "activity": activity(history, read_jsonl(LAB_STATE / "exam-history.jsonl")),
         "labs": [lab_summary(d, history) for d in lab_dirs()],
         "exams": [exam_summary(d) for d in exam_dirs()],
         "solutions": LAB_SOLUTIONS.exists(),
         "can_spin_up": (LAB_SOLUTIONS / "labs").is_dir(),
+        "last_reset": int((LAB_STATE / "last-reset").read_text().strip() or 0) if (LAB_STATE / "last-reset").exists() else 0,
     })
 
 
@@ -283,7 +575,8 @@ async def api_lab(request):
     d = find_lab(request.match_info["id"])
     history = read_jsonl(LAB_STATE / "history.jsonl")
     out = lab_summary(d, history)
-    out["markdown"] = (d / "task.md").read_text()
+    out["markdown"] = render_params((d / "task.md").read_text(), lab_params(d.name), (d / "params").exists())
+    out["randomised"] = (d / "params").exists()
     out["history"] = [h for h in history if h.get("id") == d.name][-30:]
     return web.json_response(out)
 
@@ -293,7 +586,7 @@ async def api_solution(request):
     f = LAB_SOLUTIONS / "labs" / d.name / "solution.md"
     if not f.exists():
         raise web.HTTPNotFound(text="no solution installed for this lab")
-    return web.json_response({"markdown": f.read_text()})
+    return web.json_response({"markdown": render_params(f.read_text(), lab_params(d.name), (d / "params").exists())})
 
 
 async def api_exam(request):
@@ -307,6 +600,7 @@ async def api_exam(request):
             "title": meta.get("TITLE", t.name),
             "domain": meta.get("DOMAIN", ""),
             "weight": int(meta.get("WEIGHT", "0") or 0),
+            "context": f"e{n}-t{int(t.name[:2])}",   # made by `lab exam <n> start`
             "markdown": (t / "task.md").read_text(),
             "result": read_json(LAB_STATE / "results" / f"exam{n}-{t.name}.json"),
         })
@@ -389,6 +683,13 @@ def job_argv(action: str, target: str, arg: str):
             return [LAB_BIN, "exam", n, sub], None, f"lab exam {n} {sub}"
         if sub == "cleanup":
             return [LAB_BIN, "exam", n, "cleanup", "--yes"], None, f"lab exam {n} cleanup"
+    if action.startswith("drill-"):
+        drill_id = find_drill(target).name
+        sub = action[6:]
+        if sub == "start":
+            return [LAB_BIN, "drill", drill_id], None, f"lab drill {drill_id}"
+        if sub in ("check", "cleanup"):
+            return [LAB_BIN, "drill", sub, drill_id], None, f"lab drill {sub} {drill_id}"
     if action in ("snapshot", "reset", "snapshot-delete"):
         if not SNAP_RE.match(target):
             raise web.HTTPBadRequest(text="invalid snapshot name")
@@ -597,9 +898,17 @@ async def api_snapshots(request):
                 e["time"] = max(e["time"] or 0, s.get("snaptime") or 0)
     except Exception as e:
         return web.json_response({"error": f"Proxmox API: {e}", "snapshots": []})
+    # Newer snapshots cover the node VMs, plus the jump host's lab state saved as a file
+    # (lab reset leaves the jump VM running); older ones include the jump VM itself.
+    nodes = [vm["name"] for vm in vms if vm["role"] != "jump"]
+    for f in JUMP_SNAPS.glob("*.tgz"):
+        e = snaps.get(f.stem)
+        if e is not None:
+            e["jump_state"] = True
     out = sorted(snaps.values(), key=lambda s: s["time"] or 0)
     for s in out:
-        s["complete"] = len(s["vms"]) == len(vms)
+        s.setdefault("jump_state", False)
+        s["complete"] = all(n in s["vms"] for n in nodes) and (s["jump_state"] or len(s["vms"]) == len(vms))
     return web.json_response({"snapshots": out, "vm_count": len(vms)})
 
 
@@ -780,6 +1089,14 @@ def make_app() -> web.Application:
     r.add_post("/api/exams/{n}/submit", api_exam_submit)
     r.add_get("/api/notes/{key}", api_get_note)
     r.add_put("/api/notes/{key}", api_put_note)
+    r.add_get("/api/tracks", api_tracks)
+    r.add_post("/api/quiz/{track}/start", api_quiz_start)
+    r.add_get("/api/quiz/{track}/history", api_quiz_history)
+    r.add_get("/api/quiz/sittings/{sid}", api_quiz_sitting)
+    r.add_put("/api/quiz/sittings/{sid}/answer", api_quiz_answer)
+    r.add_post("/api/quiz/sittings/{sid}/submit", api_quiz_submit)
+    r.add_get("/api/drills", api_drills)
+    r.add_get("/api/drills/{id}", api_drill)
     r.add_get("/api/jobs", api_jobs)
     r.add_post("/api/jobs", api_start_job)
     r.add_get("/api/jobs/{jid}/stream", api_job_stream)

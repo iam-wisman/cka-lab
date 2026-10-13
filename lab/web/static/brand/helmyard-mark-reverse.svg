@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -10 124 132" role="img" aria-label="HelmYard">
+  <g stroke="#ffffff" stroke-width="6.5" stroke-linecap="round"><line x1="60.0" y1="47.0" x2="60.0" y2="10.0"/><line x1="69.2" y1="50.8" x2="95.4" y2="24.6"/><line x1="73.0" y1="60.0" x2="110.0" y2="60.0"/><line x1="69.2" y1="69.2" x2="95.4" y2="95.4"/><line x1="60.0" y1="73.0" x2="60.0" y2="110.0"/><line x1="50.8" y1="69.2" x2="24.6" y2="95.4"/><line x1="47.0" y1="60.0" x2="10.0" y2="60.0"/><line x1="50.8" y1="50.8" x2="24.6" y2="24.6"/></g>
+  <g fill="#ffffff"><circle cx="96.8" cy="23.2" r="5.2"/><circle cx="112.0" cy="60.0" r="5.2"/><circle cx="96.8" cy="96.8" r="5.2"/><circle cx="60.0" cy="112.0" r="5.2"/><circle cx="23.2" cy="96.8" r="5.2"/><circle cx="8.0" cy="60.0" r="5.2"/><circle cx="23.2" cy="23.2" r="5.2"/></g>
+  <path d="M60.0 11.0V-3.0" stroke="#dbe6ff" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M61.0 -3.0l9 3.2-9 3.4z" fill="#f5922f"/>
+  <circle cx="60" cy="60" r="33" fill="none" stroke="#ffffff" stroke-width="10"/>
+  <circle cx="60" cy="60" r="33" fill="none" stroke="#dbe6ff" stroke-width="1.2" opacity=".5"/>
+  <circle cx="72.4" cy="29.4" r="1.9" fill="#326ce5"/><circle cx="90.4" cy="47.1" r="1.9" fill="#f5922f"/><circle cx="90.6" cy="72.4" r="1.9" fill="#326ce5"/><circle cx="72.9" cy="90.4" r="1.9" fill="#f5922f"/><circle cx="47.6" cy="90.6" r="1.9" fill="#326ce5"/><circle cx="29.6" cy="72.9" r="1.9" fill="#f5922f"/><circle cx="29.4" cy="47.6" r="1.9" fill="#326ce5"/><circle cx="47.1" cy="29.6" r="1.9" fill="#f5922f"/>
+  <circle cx="60" cy="60" r="22" fill="#fff7ec"/>
+  <path d="M45 59L60 46L75 59" fill="none" stroke="#f5922f" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="50" y="58" width="20" height="16" rx="2.6" fill="#33415c"/>
+  <rect x="53" y="61" width="14" height="4" rx="1.2" fill="#4c5d80"/>
+  <rect x="53" y="67" width="14" height="4" rx="1.2" fill="#4c5d80"/>
+  <circle cx="64.3" cy="63" r="1.1" fill="#3fbf7f"/><circle cx="64.3" cy="69" r="1.1" fill="#f5922f"/>
+</svg>

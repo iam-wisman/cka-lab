@@ -1,0 +1,4 @@
+TITLE="Pod with exact requests and limits"
+DOMAIN="Workloads"
+SECONDS=90
+NEEDS="05"

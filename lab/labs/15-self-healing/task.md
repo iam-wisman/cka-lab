@@ -38,13 +38,6 @@
 lab check 15
 ```
 
-## Notes
-
-- A container with `restartPolicy: Always` inside `initContainers` is a
-  native sidecar (GA since v1.33).
-- startupProbe: Kubernetes waits `failureThreshold × periodSeconds` before
-  giving up. Liveness and readiness probes don't run until it succeeds.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

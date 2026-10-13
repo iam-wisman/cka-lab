@@ -1,0 +1,6 @@
+# Drawn fresh for every attempt (see draw_params in lab/bin/lab).
+NS    word d
+DEP   word shop
+REP   int 2 4
+FAULT pick image configmap probe request
+CM    word settings

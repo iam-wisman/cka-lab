@@ -76,14 +76,6 @@ lab check 06
 The grader tests effective permissions with impersonation
 (`kubectl auth can-i --as ...`) and uses your `jane.kubeconfig` for real requests.
 
-## Notes
-
-- Verify as you go: `kubectl auth can-i --list --as jane --as-group developers -n dev`.
-- Look at what `pods/log` and `deployments/scale` are, and how a Role refers to them.
-- The CSR expiry is a field in the CSR spec; you don't need a custom CA.
-- `kubectl auth whoami --kubeconfig ~/rbac/jane.kubeconfig` shows who the API
-  server thinks you are.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

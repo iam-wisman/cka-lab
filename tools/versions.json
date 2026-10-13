@@ -1,0 +1,18 @@
+{
+  "_comment": "Versions the labs pin. tools/check-versions.py compares them with the latest upstream releases. When you bump one, update the labs, graders and solutions that name it (grep for the old version).",
+  "components": [
+    {"name": "Kubernetes (start)", "pinned": "1.34.12", "source": "k8s-minor:1.34"},
+    {"name": "Kubernetes (after lab 07, exam version)", "pinned": "1.35.9", "source": "k8s-minor:1.35"},
+    {"name": "Kubernetes (latest)", "pinned": "1.35", "source": "k8s-stable", "compare": "minor"},
+    {"name": "Calico", "pinned": "3.32.2", "source": "github:projectcalico/calico"},
+    {"name": "Helm", "pinned": "3.22.0", "source": "github:helm/helm", "major": 3},
+    {"name": "cert-manager", "pinned": "1.21.2", "source": "github:cert-manager/cert-manager"},
+    {"name": "MetalLB", "pinned": "0.16.1", "source": "github:metallb/metallb"},
+    {"name": "Envoy Gateway", "pinned": "1.9.2", "source": "github:envoyproxy/gateway"},
+    {"name": "Traefik Helm chart", "pinned": "41.7.1", "source": "github:traefik/traefik-helm-chart"},
+    {"name": "csi-driver-nfs", "pinned": "4.13.5", "source": "github:kubernetes-csi/csi-driver-nfs"},
+    {"name": "metrics-server Helm chart", "pinned": "3.14.0", "source": "github-tag:kubernetes-sigs/metrics-server:metrics-server-helm-chart-"},
+    {"name": "etcd", "pinned": "3.6", "source": "github:etcd-io/etcd", "compare": "minor"}
+  ],
+  "curricula": {"CKA": "1.35", "CKAD": null, "CKS": null, "KCNA": null, "KCSA": null}
+}

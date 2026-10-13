@@ -16,7 +16,8 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
 
   lab list                      labs with status and last score
   lab show <id>                 print a lab's tasks
-  lab start <id> [phase]        prepare the cluster for a lab (runs its setup; some labs have phases)
+  lab start <id> [phase]        prepare the cluster for a lab (runs its setup; some labs have phases);
+                                labs with randomised values draw new ones (--same keeps them)
   lab up <id> [phase]           spin a lab up on demand: build any missing prerequisite labs
                                 with the reference solutions (output hidden), then start it
   lab check <id>                grade a lab
@@ -31,10 +32,16 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
   lab exam <n> status           time remaining
   lab exam <n> cleanup [--yes]  remove the exam's leftovers (lab reset before-exam<n> is cleaner)
 
+  lab drill [list]              speed drills: one task, a tight clock, new values each time
+  lab drill <id>|random [dom]   start one (the clock runs until lab drill check passes)
+  lab drill check <id>          grade it and record the time
+  lab drill cleanup <id>        remove what it created
+
   lab snapshots                 list cluster snapshots
-  lab snapshots delete <name>   delete a snapshot from every lab VM ("base" is protected)
-  lab snapshot <name>           snapshot every lab VM (briefly stops the nodes)
-  lab reset <name>              roll every lab VM back to a snapshot ("base" = bare Ubuntu)
+  lab snapshots delete <name>   delete a snapshot ("base" is protected)
+  lab snapshot <name>           snapshot the nodes (briefly stops them) and jump's lab state
+  lab reset <name>              roll the cluster back to a snapshot ("base" = bare Ubuntu);
+                                grades, exam history and notes are kept
 
 <id> is the number or folder name, e.g. 03 or 03-kubeadm-init.
 EOF
@@ -72,12 +79,52 @@ cmd_list() {
 }
 
 cmd_show() {
-  local d; d=$(lab_dir "$1")
-  if command -v glow >/dev/null; then glow -p "$d/task.md"; else less -FRX "$d/task.md"; fi
+  local d f; d=$(lab_dir "$1"); f=$(mktemp --suffix=.md)
+  render "$d/task.md" "$(basename "$d")" >"$f"
+  if command -v glow >/dev/null; then glow -p "$f"; else less -FRX "$f"; fi
+  rm -f "$f"
+}
+
+# Words for generated names: short, unambiguous, and unlike any Kubernetes keyword.
+WORDS=(amber birch cedar delta ember fjord grove harbor indigo juniper kestrel lagoon maple nectar
+  onyx pebble quartz raven sierra tundra umber vapor willow xenon yarrow zephyr cobalt dune falcon
+  glacier heron ivory jade lynx meadow nimbus orchid pine)
+
+# draw_params <lab dir> <id>: fresh values for this attempt, from the lab's params file.
+#   KEY int LO HI [STEP] | KEY pick A B C | KEY word [PREFIX] | KEY hex [BYTES] | KEY calc EXPR
+# Values may not repeat within one draw (two ports from one range stay distinct).
+draw_params() {
+  local spec=$1/params out k gen rest a v rnd tries
+  [[ -f $spec ]] || return 0
+  mkdir -p "$LAB_STATE/params"; out=$(params_file "$2")
+  : >"$out.tmp"
+  while read -r k gen rest; do
+    [[ -z $k || $k == \#* ]] && continue
+    read -ra a <<<"$rest"
+    for tries in $(seq 1 50); do
+      rnd=$(( (RANDOM << 15) | RANDOM ))
+      case $gen in
+        int)  v=$(( a[0] + rnd % ((a[1] - a[0]) / ${a[2]:-1} + 1) * ${a[2]:-1} )) ;;
+        pick) v=${a[rnd % ${#a[@]}]} ;;
+        word) v=${a[0]:+${a[0]}-}${WORDS[rnd % ${#WORDS[@]}]} ;;
+        hex)  v=$(openssl rand -hex "${a[0]:-3}") ;;
+        calc) v=$(source "$out.tmp"; echo $(( ${rest} ))) ;;
+        *) die "$spec: unknown generator '$gen'" ;;
+      esac
+      [[ $gen == calc ]] || ! grep -q "=$(printf '%q' "$v")\$" "$out.tmp" && break
+    done
+    printf '%s=%q\n' "$k" "$v" >>"$out.tmp"
+  done <"$spec"
+  mv "$out.tmp" "$out"
 }
 
 cmd_start() {
-  local d id; d=$(lab_dir "$1"); id=$(basename "$d"); shift
+  local d id same=0; d=$(lab_dir "$1"); id=$(basename "$d"); shift
+  [[ ${*: -1} == --same ]] && { same=1; set -- "${@:1:$#-1}"; }
+  # A new attempt gets new values; a phase (later in the same attempt) or --same keeps them.
+  if [[ -f $d/params ]] && (( ! same )) && [[ -z ${1:-} || ! -f $(params_file "$id") ]]; then
+    draw_params "$d" "$id"
+  fi
   local needs; needs=$(meta "$d" NEEDS)
   [[ -n $needs ]] && info "This lab assumes these are done: $needs (lab up $id builds them)"
   if [[ -x $d/setup.sh ]]; then
@@ -122,11 +169,11 @@ closure() {
   tr ' ' '\n' <<<"$seen" | grep . | sort -rn
 }
 
-# done_already <lab dir>: passed before, built by `lab up`, or its grader passes now.
+# done_already <lab dir>: built by `lab up`, or its grader passes now. (A past pass
+# isn't enough: grades outlive `lab reset`, the cluster state doesn't.)
 done_already() {
   local id; id=$(basename "$1")
   [[ -f $LAB_STATE/provisioned/$id ]] && return 0
-  [[ -f $LAB_STATE/results/$id.json && $(jq -r '.pass == .total' "$LAB_STATE/results/$id.json") == true ]] && return 0
   GRADE_PROBE=1 GRADE_QUIET=1 GRADE_ID=$id timeout 300 bash "$1/check.sh" </dev/null >/dev/null 2>&1
 }
 
@@ -150,8 +197,26 @@ provision() {
     fi
   done
   (( ${#todo[@]} )) || { info "Everything this needs is in place"; return 0; }
-  info "Building ${#todo[@]} lab(s) with the reference solutions; this can take a while"
   mkdir -p "$LAB_STATE/provisioned" "$LAB_STATE/up"
+  # On a bare cluster (lab 01 not done) the core, labs 01-05, comes from the up-core
+  # snapshot when there is one: a 3-minute rollback instead of a 25-minute build.
+  # The jump host only gets things added, never removed, so nothing of yours is lost.
+  local from_bare=0 cache=0
+  [[ " ${todo[*]} " == *" 01 "* && " ${todo[*]} " == *" 05 "* ]] && from_bare=1
+  if (( from_bare )) && cache_ok; then
+    info "Restoring the cached core cluster (labs 01-05) from snapshot $CACHE_SNAP"
+    rollback_nodes "$CACHE_SNAP" >/dev/null
+    jump_restore "$CACHE_SNAP" add || die "couldn't restore the jump host's lab state from $CACHE_SNAP"
+    rm -f "$GRADER_KUBECONFIG"
+    wait_cluster || die "the cluster didn't come back Ready after the rollback; check lab status, then retry"
+    for n in 01 02 03 04 05; do date -u +%FT%TZ >"$LAB_STATE/provisioned/$(basename "$(lab_dir "$n")")"; done
+    info "Core cluster restored"
+    local rest=(); for n in "${todo[@]}"; do (( 10#$n > 5 )) && rest+=("$n"); done; todo=("${rest[@]}")
+    (( ${#todo[@]} )) || return 0
+  elif (( from_bare )) && [[ -r $PVE_ENV ]]; then
+    cache=1
+  fi
+  info "Building ${#todo[@]} lab(s) with the reference solutions; this can take a while"
   for n in $(printf '%s\n' "${todo[@]}" | sort -n); do
     d=$(lab_dir "$n"); id=$(basename "$d"); t0=$SECONDS
     log=$LAB_STATE/up/$id.log
@@ -160,16 +225,37 @@ provision() {
     # (No set -e here: bash ignores it in a command whose status is tested.)
     {
       echo "== $(date -u +%FT%TZ) setup" &&
+      draw_params "$d" "$id" &&
       { [[ ! -x $d/setup.sh ]] || GRADE_ID=$id bash "$d/setup.sh"; } &&
       echo "== $(date -u +%FT%TZ) solve" &&
-      bash "$LAB_SOLUTIONS/labs/$id/solve.sh"
+      GRADE_ID=$id bash "$LAB_SOLUTIONS/labs/$id/solve.sh"
     } </dev/null >"$log" 2>&1 || { echo "${c_red}failed${c_off}"; die "building $id failed (log: $log). Fix it, or lab reset base, and retry"; }
     GRADE_PROBE=1 GRADE_QUIET=1 GRADE_ID=$id bash "$d/check.sh" </dev/null >>"$log" 2>&1 \
       || { echo "${c_red}failed${c_off}"; die "$id didn't grade 100% after its reference solution (log: $log)"; }
     [[ -f $d/cleanup.sh ]] && bash "$d/cleanup.sh" </dev/null >>"$log" 2>&1
     date -u +%FT%TZ >"$LAB_STATE/provisioned/$id"
     echo "${c_green}ok${c_off} ${c_dim}$(( (SECONDS - t0) / 60 ))m$(( (SECONDS - t0) % 60 ))s${c_off}"
+    if (( cache )) && [[ $n == 05 ]]; then
+      info "Caching the core cluster as snapshot $CACHE_SNAP, so the next spin-up from scratch takes minutes"
+      snapshot_nodes "$CACHE_SNAP" "lab up cache: labs 01-05 built by the reference solutions" >/dev/null \
+        && jump_save "$CACHE_SNAP" "$(cache_key)" || info "caching failed; carrying on without it"
+      wait_cluster || die "the cluster didn't come back Ready after the snapshot"
+    fi
   done
+}
+
+CACHE_SNAP=up-core
+# The cache is only good for what built it: labs 01-05's setup scripts and reference
+# solution files. Task text, graders and docs can change without invalidating it.
+cache_key() {
+  find "$LAB_HOME"/labs/0[1-5]-* "$LAB_SOLUTIONS"/labs/0[1-5]-* -type f \
+    ! -name '*.md' ! -name check.sh ! -name cleanup.sh ! -name meta -print0 2>/dev/null |
+    sort -z | xargs -0 cat | sha1sum | cut -c1-12
+}
+cache_ok() {
+  [[ -r $PVE_ENV && -f $JUMP_SNAPS/$CACHE_SNAP.tgz ]] || return 1
+  [[ $(sudo tar -xzOf "$JUMP_SNAPS/$CACHE_SNAP.tgz" .lab-meta/key 2>/dev/null) == "$(cache_key)" ]] || return 1
+  node_vm_snapshots | grep -qx "$CACHE_SNAP"
 }
 
 cmd_up() {
@@ -183,13 +269,13 @@ run_cleanup() {
   local script=$1 label=$2 yes=${3:-}
   echo "${c_bold}Cleanup for $label${c_off} will run:"
   echo
-  sed '1,/^set -uo pipefail$/d' "$script" | sed 's/^/    /'
+  render "$script" "${GRADE_ID:-}" | sed '1,/^set -uo pipefail$/d' | sed 's/^/    /'
   echo
   if [[ $yes != --yes ]]; then
     read -rp "Run it? [y/N] " ok
     [[ $ok == y ]] || { echo "Nothing changed."; return 0; }
   fi
-  bash "$script" && info "$label cleaned up" || info "$label cleanup finished with errors (see above); running it again is safe"
+  GRADE_ID=${GRADE_ID:-} bash "$script" && info "$label cleaned up" || info "$label cleanup finished with errors (see above); running it again is safe"
 }
 
 cmd_cleanup() {
@@ -199,10 +285,27 @@ cmd_cleanup() {
     info "Save this point instead: lab snapshot after-${id%%-*}"
     return 0
   fi
-  run_cleanup "$d/cleanup.sh" "$id" "${2:-}"
+  GRADE_ID=$id run_cleanup "$d/cleanup.sh" "$id" "${2:-}"
 }
 
 # --- mock exams ----------------------------------------------------------------
+
+# exam_contexts <n> <dir> set|delete: one kubeconfig context per task (e1-t3 for task 3,
+# default namespace e1-t3), as the real exam names a context at the top of every task.
+exam_contexts() {
+  local n=$1 d=$2 action=$3 t ctx cluster user
+  command -v kubectl >/dev/null && [[ -f $HOME/.kube/config ]] || return 0
+  cluster=$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cluster}' 2>/dev/null)
+  user=$(kubectl config view --minify -o jsonpath='{.contexts[0].context.user}' 2>/dev/null)
+  for t in "$d"/tasks/*/; do
+    ctx=e$n-t$((10#$(basename "$t" | cut -c1-2)))
+    if [[ $action == set ]]; then
+      [[ -n $cluster && -n $user ]] && kubectl config set-context "$ctx" --cluster="$cluster" --user="$user" --namespace="$ctx" >/dev/null
+    else
+      kubectl config delete-context "$ctx" >/dev/null 2>&1
+    fi
+  done
+}
 
 exam_dir() { [[ -d $LAB_HOME/exams/$1 ]] || die "no mock exam $1"; echo "$LAB_HOME/exams/$1"; }
 
@@ -230,6 +333,7 @@ cmd_exam() {
           fi
         done
       done
+      exam_contexts "$n" "$d" set
       echo $(( $(date +%s) + EXAM_MINUTES * 60 )) >"$st/deadline"
       info "Mock exam $n started: $EXAM_MINUTES minutes. Read it with: lab exam $n show"
       ;;
@@ -237,7 +341,7 @@ cmd_exam() {
       if [[ -n ${3:-} ]]; then
         local t; t=$(compgen -G "$d/tasks/$(printf '%02d' "$((10#$3))")-*" | head -1)
         [[ -n $t ]] || die "no task $3"
-        less -FRX "$t/task.md"
+        { echo "Context: kubectl config use-context e$n-t$((10#$3))"; echo; cat "$t/task.md"; } | less -FRX
       else
         { cat "$d/README.md"; for t in "$d"/tasks/*/; do echo; echo "---"; echo; cat "$t/task.md"; done; } | less -FRX
       fi
@@ -273,9 +377,73 @@ cmd_exam() {
       [[ -f $d/cleanup.sh ]] || die "exam $n has no cleanup script"
       echo "${c_yellow}Tip:${c_off} 'lab reset before-exam$n' also undoes faults you didn't fix."
       run_cleanup "$d/cleanup.sh" "mock exam $n" "${3:-}"
+      exam_contexts "$n" "$d" delete
       rm -rf "$st"
       ;;
     *) usage; exit 2 ;;
+  esac
+}
+
+# --- speed drills ---------------------------------------------------------------
+#
+# One short task against a tight clock, with fresh values every attempt. The clock
+# runs from setup to `lab drill check`; every check is recorded with its time.
+
+drill_dir() {
+  local id=$1 d
+  d=$(compgen -G "$LAB_HOME/drills/$(printf '%02d' "$((10#$id))" 2>/dev/null)-*" | head -1)
+  [[ -z $d ]] && d=$(compgen -G "$LAB_HOME/drills/$id" | head -1)
+  [[ -n $d && -d $d ]] || die "no drill '$id' (try: lab drill list)"
+  echo "$d"
+}
+
+fmt_secs() { printf '%d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
+
+cmd_drill() {
+  local action=${1:-list} d id gid budget start
+  case $action in
+    list|ls)
+      printf "${c_bold}%-28s %-10s %-7s %-9s %s${c_off}\n" DRILL DOMAIN BUDGET BEST TITLE
+      for d in "$LAB_HOME"/drills/*/; do
+        d=${d%/}; id=$(basename "$d"); gid=drill-$id
+        local best; best=$(jq -rs --arg id "$gid" '[.[] | select(.id==$id and .pass==.total) | .seconds] | min // empty' "$LAB_STATE/drill-history.jsonl" 2>/dev/null)
+        printf "%-28s %-10s %-7s %-9s %s\n" "$id" "$(meta "$d" DOMAIN)" "$(fmt_secs "$(meta "$d" SECONDS)")" "${best:+$(fmt_secs "$best")}" "$(meta "$d" TITLE)"
+      done ;;
+    random)
+      local all=() dom=${2:-}
+      for d in "$LAB_HOME"/drills/*/; do
+        [[ -z $dom || $(meta "${d%/}" DOMAIN) == "$dom" ]] && all+=("$(basename "$d")")
+      done
+      (( ${#all[@]} )) || die "no drills${dom:+ in domain $dom}"
+      cmd_drill "${all[RANDOM % ${#all[@]}]}" ;;
+    check|grade)
+      d=$(drill_dir "${2:?drill id}"); id=$(basename "$d"); gid=drill-$id
+      start=$(cat "$LAB_STATE/drills/$gid.start" 2>/dev/null) || die "drill $id isn't running (lab drill $id)"
+      local secs=$(( $(date +%s) - start )) rc
+      budget=$(meta "$d" SECONDS)
+      GRADE_ID=$gid bash "$d/check.sh"; rc=$?
+      [[ -f $LAB_STATE/results/$gid.json ]] && jq -c --argjson s "$secs" --argjson b "$budget" '{id, pass, total, at, seconds: $s, budget: $b}' \
+        "$LAB_STATE/results/$gid.json" >>"$LAB_STATE/drill-history.jsonl"
+      if (( rc == 0 && secs <= budget )); then echo "${c_green}${c_bold}Time $(fmt_secs "$secs") of $(fmt_secs "$budget"): inside the budget${c_off}"
+      elif (( rc == 0 )); then echo "${c_yellow}${c_bold}Time $(fmt_secs "$secs"): $(fmt_secs $(( secs - budget ))) over the $(fmt_secs "$budget") budget${c_off}"
+      else echo "${c_dim}Time $(fmt_secs "$secs"); the clock keeps running until every check passes.${c_off}"; fi
+      return $rc ;;
+    cleanup|clean)
+      d=$(drill_dir "${2:?drill id}"); id=$(basename "$d")
+      GRADE_ID=drill-$id run_cleanup "$d/cleanup.sh" "drill $id" --yes
+      rm -f "$LAB_STATE/drills/drill-$id.start" ;;
+    *)
+      d=$(drill_dir "$action"); id=$(basename "$d"); gid=drill-$id
+      provision $(meta "$d" NEEDS)
+      draw_params "$d" "$gid"
+      info "Preparing drill $id ..."
+      GRADE_ID=$gid bash "$d/setup.sh" || die "drill setup failed"
+      mkdir -p "$LAB_STATE/drills"
+      echo
+      render "$d/task.md" "$gid"
+      echo
+      date +%s >"$LAB_STATE/drills/$gid.start"
+      info "Clock started: $(fmt_secs "$(meta "$d" SECONDS)"). Grade with: lab drill check ${id%%-*}" ;;
   esac
 }
 
@@ -301,54 +469,182 @@ wait_task() { # wait for a Proxmox task (UPID) to finish
   return 1
 }
 
+# --- the jump host's share of a snapshot -----------------------------------------------
+#
+# Snapshots cover the six node VMs. The jump host isn't rolled back: what the labs
+# install and write there (kubectl and its apt repo, Helm, HAProxy for the API load
+# balancer, kubeconfig and answer files in the home directory) is saved alongside
+# instead, and put back on reset. Progress (grades, exam history, web notes, logs)
+# and the editor's server files are not part of it, so a reset keeps them, the web
+# console keeps running and nobody is disconnected.
+
+JUMP_SNAPS=/var/lib/cka-lab/snapshots
+JUMP_PATHS=(/etc/apt/sources.list.d /etc/apt/keyrings /etc/haproxy /usr/local/bin /home/student)
+# Home paths the labs own (task files name them): an exact restore mirrors these,
+# deleting what was added since. Everything else in the home directory is only put
+# back as it was, never deleted, so your own files survive a reset.
+JUMP_HOME_OWNED=(.kube .config/helm .cka-lab answers kustomize exam1 exam2 helm rbac config calico backups cka-root-ca.crt)
+JUMP_EXCLUDES=(                                   # relative to /home/student
+  /.cka-lab/results /.cka-lab/history.jsonl /.cka-lab/exam-history.jsonl /.cka-lab/drill-history.jsonl
+  /.cka-lab/quiz-history.jsonl /.cka-lab/web /.cka-lab/up
+  /.cka-lab/grader.kubeconfig /.cka-lab/last-reset /.vscode-server /.config/Code /.cache /.ssh
+)
+
+jump_save() { # jump_save <name> [cache-key]
+  local name=$1 key=${2:-} meta p paths=() ex=()
+  meta=$(mktemp -d); mkdir "$meta/.lab-meta"
+  apt-mark showmanual | sort >"$meta/.lab-meta/manual"
+  apt-mark showhold | sort >"$meta/.lab-meta/hold"
+  xargs -r dpkg-query -W -f='${Package}=${Version}\n' <"$meta/.lab-meta/manual" >"$meta/.lab-meta/versions" 2>/dev/null
+  [[ -n $key ]] && echo "$key" >"$meta/.lab-meta/key"
+  for p in "${JUMP_PATHS[@]}"; do [[ -e $p ]] && paths+=("${p#/}"); done
+  for p in "${JUMP_EXCLUDES[@]}"; do ex+=("--exclude=home/student$p"); done
+  sudo mkdir -p "$JUMP_SNAPS"
+  sudo tar -czf "$JUMP_SNAPS/$name.tgz.tmp" "${ex[@]}" -C / "${paths[@]}" -C "$meta" .lab-meta \
+    && sudo mv "$JUMP_SNAPS/$name.tgz.tmp" "$JUMP_SNAPS/$name.tgz"
+  local rc=$?; rm -rf "$meta"; return $rc
+}
+
+# jump_restore <name> [add]: make the jump host's lab state what it was at <name>.
+# Default is exact: files and packages added since are removed, as a rollback would.
+# "add" only puts back what's missing (used by lab up, which must not delete your files).
+jump_restore() {
+  local name=$1 mode=${2:-exact} st p cur extra missing del=() ex=()
+  [[ -f $JUMP_SNAPS/$name.tgz ]] || return 1
+  st=$(mktemp -d)
+  sudo tar -xzf "$JUMP_SNAPS/$name.tgz" -C "$st" || { sudo rm -rf "$st"; return 1; }
+  [[ $mode == exact ]] && del=(--delete)
+  for p in "${JUMP_EXCLUDES[@]}"; do ex+=("--exclude=$p"); done
+  # Repositories first: package versions are installed from them.
+  for p in /etc/apt/sources.list.d /etc/apt/keyrings; do
+    [[ -d $st$p ]] && sudo rsync -a "${del[@]}" "$st$p/" "$p/"
+  done
+  cur=$(apt-mark showmanual | sort)
+  # Packages that were installed by hand at the snapshot, at the version they had then.
+  missing=$(while IFS='=' read -r pkg ver; do
+    [[ $(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null) == "$ver" ]] || echo "$pkg=$ver"
+  done <"$st/.lab-meta/versions")
+  sudo apt-get update -qq >/dev/null 2>&1
+  if [[ $mode == exact ]]; then
+    extra=$(comm -23 <(echo "$cur") "$st/.lab-meta/manual")
+    if [[ -n $extra ]]; then
+      sudo apt-mark unhold $extra >/dev/null 2>&1
+      sudo DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq $extra >/dev/null 2>&1 && info "jump: removed $(xargs <<<"$extra")"
+    fi
+  fi
+  if [[ -n $missing ]]; then
+    sudo apt-mark unhold $(sed 's/=.*//' <<<"$missing") >/dev/null 2>&1
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --allow-downgrades --allow-change-held-packages $missing >/dev/null 2>&1 \
+      && info "jump: installed $(xargs <<<"$missing")" || info "jump: couldn't install $(xargs <<<"$missing")"
+  fi
+  [[ -s $st/.lab-meta/hold ]] && sudo apt-mark hold $(cat "$st/.lab-meta/hold") >/dev/null 2>&1
+  for p in /etc/haproxy /usr/local/bin; do
+    # (never delete the lab command itself, linked into /usr/local/bin by the installer)
+    if [[ -d $st$p ]]; then sudo rsync -a "${del[@]}" --exclude=/lab "$st$p/" "$p/"
+    elif [[ $mode == exact && $p == /etc/haproxy ]]; then sudo rm -rf "$p"; fi
+  done
+  sudo rsync -a "${ex[@]}" "$st/home/student/" /home/student/
+  if [[ $mode == exact ]]; then
+    local inner=()   # the progress excludes, relative to ~/.cka-lab
+    for p in "${JUMP_EXCLUDES[@]}"; do [[ $p == /.cka-lab/* ]] && inner+=("--exclude=${p#/.cka-lab}"); done
+    for p in "${JUMP_HOME_OWNED[@]}"; do
+      if [[ $p == .cka-lab ]]; then   # holds your progress: mirror around it, never remove it
+        [[ -d $st/home/student/.cka-lab ]] && sudo rsync -a --delete "${inner[@]}" "$st/home/student/.cka-lab/" /home/student/.cka-lab/
+      elif [[ -d $st/home/student/$p ]]; then sudo rsync -a --delete "$st/home/student/$p/" "/home/student/$p/"
+      elif [[ ! -e $st/home/student/$p && -e /home/student/$p ]]; then sudo rm -rf "/home/student/$p"; fi
+    done
+  fi
+  sudo chown -R student:student /home/student/.cka-lab 2>/dev/null
+  # HAProxy is the API load balancer from lab 02: run it with the restored config.
+  if [[ -f /etc/haproxy/haproxy.cfg ]] && command -v haproxy >/dev/null; then
+    sudo systemctl enable --now haproxy >/dev/null 2>&1; sudo systemctl restart haproxy
+  fi
+  sudo rm -rf "$st"
+}
+
+node_vm_snapshots() { # names of snapshots every node VM has
+  local vm vms; vms=$(lab_vmids node)
+  for vm in $vms; do
+    pve GET "/${vm%%:*}/snapshot" | jq -r '.data[] | select(.name != "current") | .name'
+  done | sort | uniq -c | awk -v n="$(wc -w <<<"$vms")" '$1 == n {print $2}'
+}
+
+# Wait until the cluster works again after a snapshot or rollback: every node Ready,
+# and the controllers running (a new namespace gets its default ServiceAccount; right
+# after a restart the static Pods come back before kube-controller-manager leads again).
+wait_cluster() {
+  local want=${#K8S_NODES[@]} ready k=("$GRADER_KUBECTL" --kubeconfig "$HOME/.kube/config" --request-timeout=10s) ns=lab-wait-$RANDOM
+  for _ in $(seq 1 90); do
+    ready=$("${k[@]}" get nodes --no-headers 2>/dev/null | awk '$2 == "Ready"' | wc -l)
+    (( ready == want )) && break
+    sleep 5
+  done
+  (( ready == want )) || return 1
+  "${k[@]}" create namespace "$ns" >/dev/null 2>&1 || return 1
+  for _ in $(seq 1 60); do
+    if "${k[@]}" -n "$ns" get serviceaccount default >/dev/null 2>&1; then
+      "${k[@]}" delete namespace "$ns" --wait=false >/dev/null 2>&1; return 0
+    fi
+    sleep 3
+  done
+  "${k[@]}" delete namespace "$ns" --wait=false >/dev/null 2>&1
+  return 1
+}
+
 cmd_snapshots() {
   local vm vmid name
-  for vm in $(lab_vmids); do
+  for vm in $(lab_vmids node); do
     vmid=${vm%%:*}; name=${vm#*:}
     printf '%-8s %s\n' "$name" "$(pve GET "/$vmid/snapshot" | jq -r '[.data[] | select(.name != "current") | .name] | join("  ")')"
   done
+  printf '%-8s %s\n' jump "$(cd "$JUMP_SNAPS" 2>/dev/null && ls -1 -- *.tgz 2>/dev/null | sed 's/\.tgz$//' | xargs) ${c_dim}(lab state only)${c_off}"
 }
 
 cmd_snapshot_delete() {
   local snap=${1:-} vm vmid name upid
   [[ $snap =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "usage: lab snapshots delete <name>"
   [[ $snap == base ]] && die "'base' is the bare-Ubuntu starting point; it can't be deleted from here"
-  for vm in $(lab_vmids); do
+  for vm in $(lab_vmids); do   # older snapshots also exist on the jump VM itself
     vmid=${vm%%:*}; name=${vm#*:}
     if upid=$(pve DELETE "/$vmid/snapshot/$snap" 2>/dev/null | jq -r .data) && [[ -n $upid && $upid != null ]]; then
       wait_task "$upid" && info "$name: deleted $snap"
     else
-      info "$name: no snapshot $snap"
+      [[ $name != jump ]] && info "$name: no snapshot $snap"
     fi
   done
+  [[ -f $JUMP_SNAPS/$snap.tgz ]] && sudo rm -f "$JUMP_SNAPS/$snap.tgz" && info "jump: deleted $snap"
 }
 
-cmd_snapshot() {
-  local snap=${1:-} vm vmid name upid
-  [[ $snap =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "snapshot names: letters, digits, - and _, starting with a letter"
-  [[ $snap == base ]] && die "'base' is reserved for the bare-Ubuntu snapshot"
-  info "Stopping nodes for a consistent snapshot (etcd on 3 members must be captured together)"
+# snapshot_nodes <name> [description]: stop the nodes, snapshot them, start them again.
+snapshot_nodes() {
+  local snap=$1 desc=${2:-lab snapshot} vm vmid name upid upids=()
   # Shut down in parallel: each node can take ~90s while systemd stops containerd.
-  local upids=()
   for vm in $(lab_vmids node); do
     upids+=("$(pve POST "/${vm%%:*}/status/shutdown" -d timeout=180 -d forceStop=1 | jq -r .data)")
   done
   for upid in "${upids[@]}"; do wait_task "$upid"; done
-  for vm in $(lab_vmids); do
+  for vm in $(lab_vmids node); do
     vmid=${vm%%:*}; name=${vm#*:}
     pve DELETE "/$vmid/snapshot/$snap" >/dev/null 2>&1 && sleep 3
-    upid=$(pve POST "/$vmid/snapshot" -d snapname="$snap" -d description="lab snapshot $(date -u +%FT%TZ)" | jq -r .data)
+    upid=$(pve POST "/$vmid/snapshot" -d snapname="$snap" -d description="$desc $(date -u +%FT%TZ)" | jq -r .data)
     wait_task "$upid" && info "$name: snapshot $snap"
   done
   for vm in $(lab_vmids node); do pve POST "/${vm%%:*}/status/start" >/dev/null; done
+}
+
+cmd_snapshot() {
+  local snap=${1:-}
+  [[ $snap =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "snapshot names: letters, digits, - and _, starting with a letter"
+  [[ $snap == base ]] && die "'base' is reserved for the bare-Ubuntu snapshot"
+  info "Stopping nodes for a consistent snapshot (etcd on 3 members must be captured together)"
+  snapshot_nodes "$snap"
+  jump_save "$snap" && info "jump: lab state saved as $snap" || die "couldn't save the jump host's lab state"
   info "Nodes starting; the cluster is back in a minute or two"
 }
 
-cmd_reset() {
-  local snap=${1:-} vm vmid name upid
-  [[ -n $snap ]] || die "usage: lab reset <snapshot>"
-  read -rp "Roll ALL lab VMs back to '$snap'? Everything since is lost. [y/N] " ok
-  [[ $ok == y ]] || exit 0
+# rollback_nodes <name>: roll every node VM back to a snapshot and start it.
+rollback_nodes() {
+  local snap=$1 vm vmid name upid
   for vm in $(lab_vmids node); do
     vmid=${vm%%:*}; name=${vm#*:}
     pve POST "/$vmid/status/stop" >/dev/null 2>&1 && sleep 2
@@ -356,8 +652,26 @@ cmd_reset() {
     wait_task "$upid"; pve POST "/$vmid/status/start" >/dev/null
     info "$name: rolled back to $snap"
   done
-  rm -rf "$LAB_STATE/results" "$LAB_STATE/started" "$LAB_STATE/provisioned" "$LAB_STATE/up" "$LAB_STATE"/exam-*
-  # The jump host goes last: rolling it back ends this session.
+}
+
+cmd_reset() {
+  local snap=${1:-} vm vmid
+  [[ -n $snap ]] || die "usage: lab reset <snapshot>"
+  if [[ -f $JUMP_SNAPS/$snap.tgz ]]; then
+    read -rp "Roll the cluster back to '$snap'? Cluster changes and lab files on jump since then are lost; grades and notes are kept. [y/N] " ok
+    [[ $ok == y ]] || exit 0
+    rollback_nodes "$snap"
+    jump_restore "$snap" && info "jump: lab state restored to $snap"
+    rm -f "$GRADER_KUBECONFIG"
+    date +%s >"$LAB_STATE/last-reset"
+    info "Nodes starting; the cluster is back in a minute or two"
+    return 0
+  fi
+  # Snapshots from before the jump's lab state was saved separately include the jump
+  # VM itself: roll it back too, the old way (this session ends, progress since is lost).
+  read -rp "Roll ALL lab VMs back to '$snap', including the jump host? Everything since is lost, grades too. [y/N] " ok
+  [[ $ok == y ]] || exit 0
+  rollback_nodes "$snap"
   vm=$(lab_vmids jump); vmid=${vm%%:*}
   info "Rolling back the jump host; you'll be disconnected. Reconnect in about a minute."
   pve POST "/$vmid/snapshot/$snap/rollback" -d start=1 >/dev/null
@@ -372,6 +686,7 @@ case ${1:-} in
   solution) cmd_solution "${2:?lab id}" ;;
   cleanup|clean) cmd_cleanup "${2:?lab id}" "${3:-}" ;;
   exam) shift; cmd_exam "$@" ;;
+  drill|drills) shift; cmd_drill "$@" ;;
   snapshots)
     case ${2:-} in
       "") cmd_snapshots ;;
@@ -379,6 +694,9 @@ case ${1:-} in
       *) usage; exit 2 ;;
     esac ;;
   snapshot) cmd_snapshot "${2:-}" ;;
+  # Save only the jump host's lab state under a snapshot name (used by the installer for
+  # "base", and to bring snapshots taken before this existed up to date).
+  jump-state) [[ ${2:-} =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "usage: lab jump-state <name>"; jump_save "$2" && info "jump: lab state saved as $2" ;;
   reset) cmd_reset "${2:-}" ;;
   ""|-h|--help|help) usage ;;
   *) usage; exit 2 ;;

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared helpers for the lab CLI, setup scripts and graders. Sourced, not run.
 #
 # Everything runs as `student` on the jump host. Nodes are reached over SSH
@@ -109,3 +110,39 @@ want = json.load(sys.stdin).get("config", {})
 have = yaml.safe_load(open(sys.argv[1])) or {}
 sys.exit(0 if want and want == have else 1)' "$3"
 }
+
+# drill_ns <name>: a fresh namespace for a drill attempt. Drill namespaces carry the
+# drill's id as a label, so the next attempt and `lab drill cleanup` find old ones.
+drill_ns() {
+  kc delete ns -l "cka-lab/drill=${GRADE_ID}" --wait=true --timeout=90s >/dev/null 2>&1
+  kc create ns "$1" >/dev/null && kc label ns "$1" "cka-lab/drill=${GRADE_ID}" >/dev/null
+  # Pods can't be created until the namespace's default ServiceAccount exists.
+  for _ in $(seq 1 40); do kc -n "$1" get serviceaccount default >/dev/null 2>&1 && return 0; sleep 1.5; done
+  die "namespace $1 has no default ServiceAccount: is kube-controller-manager running?"
+}
+
+# --- per-attempt values ------------------------------------------------------
+#
+# A lab can randomise names, ports and numbers for every attempt, so a retake tests
+# skill rather than memory. Its `params` file declares them; `lab start` draws fresh
+# values into $LAB_STATE/params/<lab>.env. The task text shows them through {{KEY}},
+# and setup, grader, cleanup and reference solution all read the same file: it is
+# loaded here automatically whenever GRADE_ID names the lab.
+
+params_file() { echo "$LAB_STATE/params/${1:-${GRADE_ID:-none}}.env"; }
+load_params() { local f; f=$(params_file "${1:-}"); if [[ -f $f ]]; then source "$f"; fi; }
+
+# render <file> [id]: print the file with {{KEY}} and ${KEY} replaced by the attempt's values.
+render() (
+  f=$(params_file "${2:-}"); text=$(<"$1")
+  if [[ -f $f ]]; then
+    source "$f"
+    for k in $(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' "$f"); do
+      text=${text//"{{$k}}"/${!k}}; text=${text//"\${$k}"/${!k}}
+    done
+  fi
+  printf '%s\n' "$text"
+)
+
+[[ -n ${GRADE_ID:-} ]] && load_params
+true

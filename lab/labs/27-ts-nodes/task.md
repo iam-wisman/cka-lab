@@ -24,15 +24,6 @@ notice). Each has **more than one** problem.
 lab check 27
 ```
 
-## Notes
-
-- `kubectl describe node` tells you *that* the kubelet stopped reporting. The
-  node itself tells you *why*: `systemctl status`, `journalctl -u kubelet`,
-  `crictl`.
-- When the kubelet keeps exiting, its log shows the reason in the last lines
-  before each restart.
-- `kubeadm` is not the tool here. Think about files, services and the kernel.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

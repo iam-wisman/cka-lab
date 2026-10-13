@@ -74,14 +74,6 @@ lab check 10
 The grader submits invalid Backups (server-side dry run) and expects the API
 server to reject them.
 
-## Notes
-
-- cert-manager CA issuers: the CA's Secret must be in the **cluster resource
-  namespace** (`cert-manager` by default) for a ClusterIssuer to find it.
-- `kubectl explain` works on your own CRD once its schema is published.
-- Write `x-kubernetes-*` and `default:` carefully: defaults only apply
-  inside a structural schema.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

@@ -37,13 +37,6 @@ Zones (lab 05): cp1/worker1 = `zone-a`, cp2/worker2 = `zone-b`, cp3 = `zone-c`.
 lab check 17
 ```
 
-## Notes
-
-- Taints repel; they don't attract. Affinity attracts; it doesn't repel.
-- `whenUnsatisfiable: DoNotSchedule` vs `ScheduleAnyway`.
-- Topology spread only counts nodes that the pod's node affinity and
-  taints/tolerations allow (`nodeAffinityPolicy`, `nodeTaintsPolicy`).
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

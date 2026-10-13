@@ -1,0 +1,4 @@
+TITLE="CronJob with history, deadline and a manual run"
+DOMAIN="Workloads"
+SECONDS=180
+NEEDS="05"

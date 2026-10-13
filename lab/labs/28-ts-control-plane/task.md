@@ -32,15 +32,6 @@ Something is wrong on **each** of `cp1`, `cp2` and `cp3`.
 lab check 28
 ```
 
-## Notes
-
-- With one API server down, `kubectl logs` for **that** pod may still work
-  (it goes through another API server), unless the kubelet on that node is
-  involved. When it doesn't, `crictl ps -a` and `crictl logs` on the node do.
-- The kubelet restarts static pods by itself after you save the manifest.
-  Don't leave backup copies in `/etc/kubernetes/manifests/`: the kubelet runs
-  **every** file there.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

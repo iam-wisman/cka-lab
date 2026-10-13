@@ -1,0 +1,5 @@
+# Drawn fresh by `lab start 19` (see draw_params in lab/bin/lab).
+PORT      int 8000 9099
+NODEPORT  int 30100 32700
+STICKY    int 4 45
+STICKYSEC calc STICKY * 60

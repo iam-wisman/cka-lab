@@ -54,15 +54,6 @@ Right now all three backends will show **DOWN**. That's correct until lab 03.
 lab check 02
 ```
 
-## Notes
-
-- Because HAProxy runs in TCP mode, the HTTP health check is separate from the
-  traffic: look at `option httpchk`, `http-check`, and the `check-ssl` and
-  `verify` server options.
-- In production you'd run two load balancers with a floating VIP (keepalived)
-  so the load balancer isn't a single point of failure. kubeadm's "Options for
-  Software Load Balancing" document covers it; read it.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).

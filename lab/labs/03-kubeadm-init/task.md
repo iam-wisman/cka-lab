@@ -67,16 +67,6 @@ The grader reads the configuration kubeadm stored in the cluster (the
 `kubeadm-config`, `kubelet-config` and `kube-proxy` ConfigMaps), the API server
 certificate on `cp1`, and your `~/.kube/config` on `jump`.
 
-## Notes
-
-- `kubeadm config print init-defaults --component-configs KubeletConfiguration,KubeProxyConfiguration`
-  prints a starting point with all four documents.
-- `kubeadm init` has `--dry-run`, and `kubeadm reset -f` undoes a failed
-  attempt (it leaves `/etc/cni/net.d` and iptables/nftables rules behind; read
-  its output).
-- Save the `kubeadm join` commands init prints. You'll regenerate them in lab
-  05 anyway: the uploaded certificates expire after two hours.
-
 ## References
 
 Official documentation. Practise finding answers on kubernetes.io: it is the main resource the exam lets you open (the Linux Foundation candidate handbook has the current list).
@@ -109,7 +99,7 @@ snapshot. Take one **before** you start:
 ```bash
 lab snapshot before-03
 # ... attempt the lab ...
-lab reset before-03        # all VMs roll back; reconnect to jump after ~1 minute
+lab reset before-03        # the cluster and the lab files on jump roll back; grades are kept
 ```
 
 If you didn't take one, undo the init by hand on cp1, then delete the old credentials on jump:
