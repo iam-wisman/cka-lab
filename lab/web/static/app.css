@@ -1,5 +1,6 @@
 /* HelmYard (Kubernetes Playgrounds): the lab web console.
-   Styled after kubernetes.io: its palette (blue #326CE5 nav bar and hero band, Bootstrap
+   Brand: HelmYard (docs/brand/kit): Night Navy shell, Kube Blue, Playground Orange,
+   Lively Teal for healthy states. Styled after kubernetes.io: its palette (blue #326CE5 nav bar and hero band, Bootstrap
    greys), its typeface (Open Sans) and its plain sentence-case buttons. White cards with a
    header strip and a status footer. Light only. JetBrains Mono Nerd Font for anything you
    could type, the terminal included. */
@@ -24,6 +25,12 @@
   --slate: #403f4c;
   --mint: #c0e0de;
 
+  /* HelmYard brand kit (docs/brand/kit/palettes): navy canvas, orange accent, teal = healthy */
+  --hy-navy: #0E1E38;
+  --hy-orange: #FF8E3C;
+  --hy-teal: #1CD1A1;
+  --hy-slate: #8A99AD;
+
   --bg: #f8f9fa;
   --panel: #ffffff;
   --panel-solid: #ffffff;
@@ -45,11 +52,11 @@
   --focus: 0 0 0 3px rgba(50, 108, 229, .25);
 
   /* terminal: always a dark screen */
-  --screen: #303030;
-  --screen-2: #3b3b3b;
-  --screen-rule: rgba(255, 255, 255, .12);
-  --screen-ink: #f1f3f5;
-  --screen-muted: #a3abb3;
+  --screen: #0E1E38;
+  --screen-2: #182c4f;
+  --screen-rule: rgba(138, 153, 173, .2);
+  --screen-ink: #eef3fb;
+  --screen-muted: #8A99AD;
 
   --d1: #326ce5; --d2: #ed6a5a; --d3: #403f4c; --d4: #8cc7c2; --d5: #234ca0;  /* exam domains */
 
@@ -114,21 +121,21 @@ button, input, textarea, select { font: inherit; color: inherit; }
   flex: none; height: 58px; position: relative; z-index: 5;
   display: flex; align-items: center; gap: 28px;
   padding: 0 22px;
-  background: var(--k8s); color: #fff;
+  background: var(--hy-navy); color: #fff;
 }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
 .brand-mark { width: 36px; height: 36px; flex: none; }
 .brand-text { display: flex; flex-direction: column; gap: 3px; white-space: nowrap; }
 .brand-name { font: 800 20px/1 var(--ui); letter-spacing: -.01em; }
-.brand-name b { font-weight: 800; color: #ffb066; }
-.brand-text small { font: 600 10.5px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+.brand-name b { font-weight: 800; color: var(--hy-orange); }
+.brand-text small { font: 600 10.5px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--hy-slate); }
 .nav { display: flex; gap: 2px; align-items: center; }
 .nav a {
   display: flex; align-items: center; height: 34px; padding: 0 13px; border-radius: 6px;
   text-decoration: none; color: rgba(255, 255, 255, .82); font: 600 15px var(--ui); transition: background .15s, color .15s;
 }
 .nav a:hover { color: #fff; background: rgba(255, 255, 255, .12); }
-.nav a.on { color: #fff; background: rgba(255, 255, 255, .18); }
+.nav a.on { color: #fff; background: var(--k8s); }
 .top .btn.quiet { color: #fff; }
 .top .btn.quiet:hover { background: rgba(255, 255, 255, .14); }
 .top .pill { border-color: transparent; }
@@ -143,7 +150,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 .pill:hover { border-color: var(--k8s); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
-.dot.ok { background: var(--pass); }
+.dot.ok { background: var(--hy-teal); }
 .dot.bad { background: var(--fail); }
 .dot.warn { background: var(--warn); }
 .pill.job { background: var(--k8s); color: #fff; border-color: transparent; cursor: pointer; }
@@ -178,15 +185,15 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 .term-card { background: var(--screen); color: var(--screen-ink); border-radius: 10px; box-shadow: var(--shadow-lg); overflow: hidden; }
 .term-card-bar { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; }
-.term-card-bar i { width: 11px; height: 11px; border-radius: 50%; background: #4a4a4a; }
+.term-card-bar i { width: 11px; height: 11px; border-radius: 50%; background: #2a3d60; }
 .term-card-bar span { margin-left: auto; font: 500 12px var(--mono); color: var(--screen-muted); }
 .term-card-body { padding: 4px 18px 18px; font: 13.5px/1.75 var(--mono); white-space: pre; overflow-x: auto; min-height: 220px; }
-.term-card-body .p { color: #5ee6a8; }
+.term-card-body .p { color: var(--hy-teal); }
 .term-card-body .n { color: var(--screen-ink); }
-.term-card-body .ok { color: #5ee6a8; }
+.term-card-body .ok { color: var(--hy-teal); }
 .term-card-body .bad { color: #ff8a9a; }
 .term-card-body .m { color: var(--screen-muted); }
-.cursor { display: inline-block; width: 8px; height: 16px; background: #5ee6a8; vertical-align: -3px; animation: blink 1.1s steps(1) infinite; }
+.cursor { display: inline-block; width: 8px; height: 16px; background: var(--hy-teal); vertical-align: -3px; animation: blink 1.1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
 .section-head { display: flex; align-items: baseline; gap: 14px; margin: 44px 0 14px; }
@@ -402,7 +409,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .drawer-head .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawer-head .state { padding: 1px 8px; border-radius: 5px; font-size: 10.5px; font-weight: 700; }
 .drawer-head .state.run { background: var(--k8s); color: #fff; animation: pulse 1.6s ease-in-out infinite; }
-.drawer-head .state.ok { background: rgba(52, 211, 153, .16); color: #5ee6b4; }
+.drawer-head .state.ok { background: rgba(28, 209, 161, .16); color: var(--hy-teal); }
 .drawer-head .state.bad { background: rgba(248, 113, 113, .16); color: #ff8a9a; }
 @keyframes pulse { 50% { opacity: .65; } }
 .drawer-head button { background: none; border: 0; color: var(--screen-muted); cursor: pointer; font: inherit; padding: 2px 4px; }
@@ -410,7 +417,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .drawer pre { margin: 0; padding: 10px 14px 14px; overflow: auto; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; min-height: 120px; }
 .drawer.min pre { display: none; }
 .a-b { font-weight: 700; } .a-d { opacity: .6; }
-.a-31 { color: #ff8a9a; } .a-32 { color: #5ee6b4; } .a-33 { color: #ffd27a; } .a-34 { color: #7ea6ff; }
+.a-31 { color: #ff8a9a; } .a-32 { color: var(--hy-teal); } .a-33 { color: var(--hy-orange); } .a-34 { color: #7ea6ff; }
 
 /* terminal pane: a dark window */
 .term-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--screen); border-radius: var(--r-card); overflow: hidden; box-shadow: var(--shadow-lg); }
@@ -419,7 +426,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .term-tab::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--screen-muted); }
 .term-tab:hover { color: var(--screen-ink); }
 .term-tab.on { color: var(--screen-ink); background: var(--screen-2); }
-.term-tab.on::before { background: #5ee6a8; }
+.term-tab.on::before { background: var(--hy-teal); }
 .term-tab button, .term-bar > button { background: none; border: 0; border-radius: 6px; color: inherit; cursor: pointer; font: inherit; padding: 0 8px; height: 26px; }
 .term-tab button { opacity: .5; padding: 0 6px; }
 .term-tab button:hover { opacity: 1; }
@@ -506,7 +513,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .login-brand { text-align: center; }
 .login-brand img { width: 92px; height: 92px; }
 .login-brand .brand-name { font-size: 34px; margin-top: 4px; color: var(--ink); }
-.login-brand .brand-name b { color: #e8811b; }
+.login-brand .brand-name b { color: var(--hy-orange); }
 .login-brand .tagline { font: 700 12px var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--k8s-ink); margin-top: 6px; }
 .login h1 { margin: 26px 0 6px; font: 700 28px/1.1 var(--ui); }
 .login p { margin: 0 0 22px; color: var(--ink-2); font-size: 14.5px; }

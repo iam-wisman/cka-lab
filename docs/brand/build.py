@@ -3,15 +3,19 @@
 yard), redrawn as SVG from the logo artwork so it stays sharp at any size.
 
   python3 docs/brand/build.py      writes the SVGs here and copies the web ones to lab/web/static/brand/
+
+The official kit (palette, tokens, wordmarks, favicon, guidelines) is in kit/; the
+favicon there is used as is.
 """
 import math, os, shutil
 
 here = os.path.dirname(os.path.abspath(__file__))
 web = os.path.join(here, "..", "..", "lab", "web", "static", "brand")
 
-ORANGE, GREEN, NAVY = "#f5922f", "#3fbf7f", "#121a33"
+# Official palette: docs/brand/kit/palettes/colors.json
+ORANGE, GREEN, NAVY = "#FF8E3C", "#1CD1A1", "#0E1E38"
 VARIANTS = {   # wheel, wheel shade, hub, dots
-    "color":   ("#3b6fd8", "#2a55b8", "#fff7ec", ("#fff7ec", ORANGE)),
+    "color":   ("#326CE5", "#2554b8", "#fff7ec", ("#fff7ec", ORANGE)),
     "reverse": ("#ffffff", "#dbe6ff", "#fff7ec", ("#326ce5", ORANGE)),
 }
 
@@ -49,7 +53,7 @@ def banner():
   <rect width="960" height="390" rx="18" fill="{NAVY}"/>
   {mark("color", False, 375, 18, 210)}
   <text x="480" y="300" text-anchor="middle" font-family="{font}" font-size="86" font-weight="800"><tspan fill="#ffffff">Helm</tspan><tspan fill="{ORANGE}">Yard</tspan></text>
-  <text x="480" y="348" text-anchor="middle" font-family="{font}" font-size="26" font-weight="700" letter-spacing="4" fill="#8fb0ff">KUBERNETES PLAYGROUNDS</text>
+  <text x="480" y="348" text-anchor="middle" font-family="{font}" font-size="26" font-weight="700" letter-spacing="4" fill="#326CE5">KUBERNETES PLAYGROUNDS</text>
 </svg>
 '''
 
@@ -60,5 +64,4 @@ for name, svg in files.items():
 os.makedirs(web, exist_ok=True)
 for name in ("helmyard-mark.svg", "helmyard-mark-reverse.svg"):
     shutil.copy(os.path.join(here, name), os.path.join(web, name))
-shutil.copy(os.path.join(here, "helmyard-mark.svg"), os.path.join(web, "..", "favicon.svg"))
 print("wrote", ", ".join(files), "and the web copies")

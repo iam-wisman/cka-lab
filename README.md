@@ -200,6 +200,13 @@ How it's built:
 - **Front end:** plain JavaScript with no build step. xterm.js, marked and
   DOMPurify are vendored at pinned versions, so the console works without
   internet access.
+- **Brand:** HelmYard, *Kubernetes Playgrounds*. The official kit is in
+  [`docs/brand/kit/`](docs/brand/kit/guidelines/BRAND_GUIDELINES.md): palette
+  (Night Navy `#0E1E38`, Kube Blue `#326CE5`, Playground Orange `#FF8E3C`, Lively
+  Teal `#1CD1A1`, Slate `#8A99AD`), wordmarks, favicon, guidelines.
+  `docs/brand/build.py` draws the helm-and-server mark as SVG (colour and
+  reversed) and the README banner. The console uses Night Navy for the shell and
+  terminals, orange for the "Yard" accent, and teal for healthy states.
 - **Design:** styled after [kubernetes.io](https://kubernetes.io/): its palette
   (the blue `#326CE5` nav bar and hero band, dark blue `#234CA0`, coral
   `#ED6A5A`, slate `#403F4C`, mint `#C0E0DE`, Bootstrap greys), its typeface

@@ -347,13 +347,13 @@ function showJobDialog(info) {
 
 // --- terminals ------------------------------------------------------------------------------------
 
-const TERM_THEME = {
-  background: "#303030", foreground: "#f1f3f5", cursor: "#8fb0ff", cursorAccent: "#303030",
+const TERM_THEME = {   // HelmYard: Night Navy screen, teal for green, orange for yellow
+  background: "#0E1E38", foreground: "#eef3fb", cursor: "#1CD1A1", cursorAccent: "#0E1E38",
   selectionBackground: "#326ce580",
-  black: "#403f4c", red: "#ff7b72", green: "#7ee2a8", yellow: "#f2cc60", blue: "#7aa2f7",
-  magenta: "#d2a8ff", cyan: "#79d4cf", white: "#dee2e6",
-  brightBlack: "#868e96", brightRed: "#ffa198", brightGreen: "#a5f0c5", brightYellow: "#f8e3a1",
-  brightBlue: "#a5c0ff", brightMagenta: "#e2c5ff", brightCyan: "#c0e0de", brightWhite: "#ffffff",
+  black: "#1b2f52", red: "#ff6b7a", green: "#1CD1A1", yellow: "#FF8E3C", blue: "#6f9bff",
+  magenta: "#c79bff", cyan: "#5cd3e6", white: "#d5deec",
+  brightBlack: "#8A99AD", brightRed: "#ff97a2", brightGreen: "#6be6c4", brightYellow: "#ffb47e",
+  brightBlue: "#9dbcff", brightMagenta: "#dcc0ff", brightCyan: "#9be6f1", brightWhite: "#ffffff",
 };
 
 const Terms = {
@@ -613,7 +613,7 @@ function activityBars(days) {
 
 function renderTop() {
   const top = h("header", { class: "top" },
-    h("a", { class: "brand", href: "#/", title: "HelmYard: overview" }, h("img", { class: "brand-mark", src: "/static/brand/helmyard-mark-reverse.svg", alt: "" }),
+    h("a", { class: "brand", href: "#/", title: "HelmYard: overview" }, h("img", { class: "brand-mark", src: "/static/brand/helmyard-mark.svg", alt: "" }),
       h("span", { class: "brand-text" }, h("span", { class: "brand-name" }, "Helm", h("b", {}, "Yard")), h("small", {}, "Kubernetes Playgrounds"))),
     h("nav", { class: "nav" },
       h("a", { href: "#/kubestronaut", "data-r": "kubestronaut" }, "Kubestronaut"),

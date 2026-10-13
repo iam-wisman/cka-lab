@@ -1,0 +1,12 @@
+:root {
+  /* HelmYard Brand Kit Design Tokens */
+  --hy-color-bg: #0E1E38;
+  --hy-color-primary: #326CE5;
+  --hy-color-accent: #FF8E3C;
+  --hy-color-success: #1CD1A1;
+  --hy-color-text-primary: #FFFFFF;
+  --hy-color-text-secondary: #8A99AD;
+  
+  --hy-font-primary: "Inter", "Aptos", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --hy-font-mono: "JetBrains Mono", "Fira Code", monospace;
+}

@@ -1,0 +1,41 @@
+{
+  "brand_name": "HelmYard",
+  "colors": {
+    "night_navy": {
+      "hex": "#0E1E38",
+      "rgb": "rgb(14, 30, 56)",
+      "hsl": "hsl(217, 60%, 14%)",
+      "role": "Primary Dark Background, Shell, Contrast base"
+    },
+    "kube_blue": {
+      "hex": "#326CE5",
+      "rgb": "rgb(50, 108, 229)",
+      "hsl": "hsl(221, 78%, 55%)",
+      "role": "Primary Brand Color, Kubernetes Steering Wheel, Borders, Active states"
+    },
+    "playground_orange": {
+      "hex": "#FF8E3C",
+      "rgb": "rgb(255, 142, 60)",
+      "hsl": "hsl(25, 100%, 62%)",
+      "role": "Accent / Highlight Color, 'Yard', Playful elements, CTAs"
+    },
+    "lively_teal": {
+      "hex": "#1CD1A1",
+      "rgb": "rgb(28, 209, 161)",
+      "hsl": "hsl(164, 76%, 46%)",
+      "role": "Secondary Accent, Status Healthy / Online, Pod/Node indicators"
+    },
+    "cloud_white": {
+      "hex": "#FFFFFF",
+      "rgb": "rgb(255, 255, 255)",
+      "hsl": "hsl(0, 0%, 100%)",
+      "role": "Primary Text, Icons on dark backgrounds"
+    },
+    "slate_gray": {
+      "hex": "#8A99AD",
+      "rgb": "rgb(138, 153, 173)",
+      "hsl": "hsl(214, 18%, 61%)",
+      "role": "Muted Text, Subtitles, Borders"
+    }
+  }
+}
