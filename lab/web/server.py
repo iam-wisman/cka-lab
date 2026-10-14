@@ -574,6 +574,8 @@ async def api_overview(request):
         "exams": [exam_summary(d) for d in exam_dirs()],
         "solutions": LAB_SOLUTIONS.exists(),
         "can_spin_up": (LAB_SOLUTIONS / "labs").is_dir(),
+        # Presets saved as live snapshots by an earlier spin-up: restored in under a minute.
+        "playground_cached": {p: (JUMP_SNAPS / f"pg-{p}.tgz").exists() for p in ("core", "full")},
         "last_reset": int((LAB_STATE / "last-reset").read_text().strip() or 0) if (LAB_STATE / "last-reset").exists() else 0,
     })
 

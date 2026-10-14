@@ -38,7 +38,10 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
   lab drill check <id>          grade it and record the time
   lab drill cleanup <id>        remove what it created
 
-  lab playground [core|full]    a working cluster to experiment on, built with the reference solutions:
+  lab playground [core|full] [--rebuild]
+                                a working cluster to experiment on. The first time it's built with the
+                                reference solutions and saved as a live snapshot (with the VMs' memory);
+                                after that it's restored from it in under a minute (replacing the cluster):
                                 core = HA control plane + 2 workers on v1.35 (labs 01-07);
                                 full = core + metrics-server, cert-manager, MetalLB, Traefik,
                                 Envoy Gateway and NFS storage
@@ -542,7 +545,7 @@ jump_restore() {
   missing=$(while IFS='=' read -r pkg ver; do
     [[ $(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null) == "$ver" ]] || echo "$pkg=$ver"
   done <"$st/.lab-meta/versions")
-  sudo apt-get update -qq >/dev/null 2>&1
+  [[ -n $missing ]] && sudo apt-get update -qq >/dev/null 2>&1   # slow: only when something must be installed
   if [[ $mode == exact ]]; then
     extra=$(comm -23 <(echo "$cur") "$st/.lab-meta/manual")
     if [[ -n $extra ]]; then
@@ -681,21 +684,95 @@ cmd_power() {
   esac
 }
 
+# --- live snapshots: the cluster with its memory, back in seconds ----------------------
+#
+# A snapshot with the VMs' RAM (Proxmox vmstate) rolls back to *running* VMs: no boot,
+# no kubelet start, no cold etcd election. All node VMs are handled at once. They are
+# saved while running, one after another within seconds; etcd copes, as with a member
+# that lagged (the most up-to-date log wins the election). Each costs about the nodes'
+# RAM (~25 GB) on the VM storage.
+
+parallel_task() { # parallel_task <method> <path suffix> [curl args]: on every node VM, wait for all
+  local method=$1 suffix=$2 vm upid upids=(); shift 2
+  for vm in $(lab_vmids node); do
+    upid=$(pve "$method" "/${vm%%:*}$suffix" "$@" 2>/dev/null | jq -r '.data // empty') && [[ -n $upid ]] && upids+=("$upid")
+  done
+  for upid in "${upids[@]}"; do wait_task "$upid"; done
+}
+
+snapshot_live() { # snapshot_live <name> <description>
+  parallel_task DELETE "/snapshot/$1"
+  parallel_task POST /snapshot -d snapname="$1" -d vmstate=1 -d description="$2 $(date -u +%FT%TZ)"
+  [[ $(node_vm_snapshots | grep -cx "$1") == 1 ]]
+}
+
+rollback_live() { # rollback_live <name>: stop, roll back (RAM included: they come back running)
+  parallel_task POST /status/stop
+  parallel_task POST "/snapshot/$1/rollback" -d start=1
+  # The guests' clocks are where the snapshot left them: set them from the jump host.
+  local n
+  for n in "${K8S_NODES[@]}" nfs; do wait_for 60 node_up "$n" || return 1; done
+  for n in "${K8S_NODES[@]}" nfs; do on "$n" date -s "@$(date +%s.%N)" >/dev/null & done; wait
+  rm -f "$GRADER_KUBECONFIG"
+}
+
+# labs_key <nums...>: what a cached cluster depends on (setup scripts and reference solutions).
+labs_key() {
+  local n dirs=()
+  for n in "$@"; do dirs+=("$(lab_dir "$n")" "$LAB_SOLUTIONS/labs/$(basename "$(lab_dir "$n")")"); done
+  find "${dirs[@]}" -type f ! -name '*.md' ! -name check.sh ! -name cleanup.sh ! -name meta -print0 2>/dev/null |
+    sort -z | xargs -0 cat | sha1sum | cut -c1-12
+}
+
+live_cached() { # live_cached <snapshot> <key>: on every node, with RAM, for these sources
+  [[ -r $PVE_ENV && -f $JUMP_SNAPS/$1.tgz ]] || return 1
+  [[ $(sudo tar -xzOf "$JUMP_SNAPS/$1.tgz" .lab-meta/key 2>/dev/null) == "$2" ]] || return 1
+  local vm
+  for vm in $(lab_vmids node); do
+    pve GET "/${vm%%:*}/snapshot" | jq -e --arg s "$1" '.data[] | select(.name == $s and .vmstate == 1)' >/dev/null || return 1
+  done
+}
+
 # --- playground: a working cluster to experiment on -----------------------------------
 
 PLAYGROUND_CORE="07"                        # 01-07: HA control plane, 2 workers, Calico, v1.35
 PLAYGROUND_FULL="07 09 10 20 22 23 25"      # + metrics-server, cert-manager, MetalLB, Traefik, Envoy Gateway, NFS
 
+# The first spin-up of a preset builds it with the reference solutions (slow, once) and
+# saves it as a live snapshot, pg-<preset>. Every spin-up after that restores the snapshot:
+# under a minute. Like a reset, that replaces whatever is on the cluster now.
 cmd_playground() {
-  local preset=${1:-core} want
+  local preset=${1:-core} want snap t0=$SECONDS key n
   case $preset in
     core) want=$PLAYGROUND_CORE ;;
     full) want=$PLAYGROUND_FULL ;;
-    *) die "usage: lab playground [core|full]" ;;
+    *) die "usage: lab playground [core|full] [--rebuild]" ;;
   esac
-  provision $want
+  snap=pg-$preset
+  key=$(labs_key $(closure $want))
+  mkdir -p "$LAB_STATE/provisioned"
+  if [[ ${2:-} != --rebuild ]] && live_cached "$snap" "$key"; then
+    info "Restoring the $preset playground from its live snapshot $snap"
+    rollback_live "$snap" || die "the nodes didn't come back after the rollback; check lab power status"
+    jump_restore "$snap" add || die "couldn't restore the jump host's lab state from $snap"
+    info "Checking the cluster"
+    wait_cluster || die "the cluster isn't Ready after the restore; try again, or lab playground $preset --rebuild"
+    for n in $(closure $want); do date -u +%FT%TZ >"$LAB_STATE/provisioned/$(basename "$(lab_dir "$n")")"; done
+    date +%s >"$LAB_STATE/last-reset"
+  else
+    ensure_nodes
+    provision $want
+    if [[ -r $PVE_ENV ]]; then
+      info "Saving it as the live snapshot $snap, so the next spin-up takes under a minute"
+      if snapshot_live "$snap" "lab playground $preset: labs $(closure $want | sort -n | xargs)"; then
+        jump_save "$snap" "$key" || info "couldn't save the jump host's share; the next spin-up rebuilds"
+      else
+        info "the live snapshot failed (does the API token have Datastore.AllocateSpace? re-run infra/install-lab.sh); carrying on without it"
+      fi
+    fi
+  fi
   mkdir -p "$LAB_STATE" && echo "$preset" >"$LAB_STATE/playground"
-  info "Playground ready ($preset). The cluster is yours: kubectl get nodes -o wide"
+  info "Playground ready ($preset) in $(( (SECONDS - t0) / 60 ))m$(( (SECONDS - t0) % 60 ))s. The cluster is yours: kubectl get nodes -o wide"
 }
 
 cmd_snapshots() {
@@ -786,7 +863,7 @@ cmd_reset() {
 
 # Commands that work on the cluster start its VMs first if they are off.
 case ${1:-}:${2:-} in
-  start:*|up:*|check:*|grade:*|cleanup:*|clean:*|playground:*|snapshot:*) ensure_nodes ;;
+  start:*|up:*|check:*|grade:*|cleanup:*|clean:*|snapshot:*) ensure_nodes ;;   # playground decides itself
   exam:*) [[ ${3:-} =~ ^(start|prep|up|begin|check|cleanup)$ ]] && ensure_nodes ;;
   drill:*|drills:*) [[ ${2:-list} =~ ^(list|ls)$ ]] || ensure_nodes ;;
 esac
@@ -809,7 +886,7 @@ case ${1:-} in
     esac ;;
   snapshot) cmd_snapshot "${2:-}" ;;
   power) cmd_power "${2:-status}" ;;
-  playground) cmd_playground "${2:-core}" ;;
+  playground) cmd_playground "${2:-core}" "${3:-}" ;;
   # Save only the jump host's lab state under a snapshot name (used by the installer for
   # "base", and to bring snapshots taken before this existed up to date).
   jump-state) [[ ${2:-} =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "usage: lab jump-state <name>"; jump_save "$2" && info "jump: lab state saved as $2" ;;

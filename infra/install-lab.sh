@@ -105,6 +105,15 @@ EOF
     jssh 'sudo install -m 600 -o student -g student /dev/stdin /etc/cka-lab/pve.env'
 fi
 
+# Live snapshots (lab playground) save the VMs' memory next to their disks: that needs
+# space on the VM storage, and nothing else there.
+if (( TOKEN )); then
+  echo "[install] Proxmox: memory snapshots may allocate VM state on $STORAGE"
+  pve "pveum role list --output-format json | grep -q '\"CKALabState\"' ||
+    pveum role add CKALabState --privs 'Datastore.AllocateSpace Datastore.Audit'
+    pveum acl modify /storage/$STORAGE --users cka-lab@pve --roles CKALabState"
+fi
+
 echo "[install] web console"
 jssh 'dpkg -s python3-aiohttp >/dev/null 2>&1 || { sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get install -y -qq python3-aiohttp >/dev/null; }'
 if (( WEB_PW_RESET )) || ! jssh 'sudo test -s /etc/cka-lab/web.env'; then

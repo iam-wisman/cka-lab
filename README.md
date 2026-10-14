@@ -155,7 +155,7 @@ can be mixed freely.
 |---|---|
 | **Roadmap** (home) | the five certifications in order, with where you are; what you're working on (and how far its setup is), the cluster's power state, and the idle-shutdown countdown |
 | **Working on** | starting a lab, drill, mock exam or playground records it on the server: **Preparing** while its setup runs (with the line it's on), then **In progress**, or **Setup failed**/**Interrupted**. A chip in the top bar, the catalogue cards and the workspace all show it, in every tab and after a reload, so leaving the page never loses track. Job output is kept on disk, and every multi-step start (prerequisites, snapshot, setup) is one server-side job |
-| **Playground** | a working cluster to try commands on, with no tasks and no grading: **Core** (HA control plane and two workers on v1.35) or **Full stack** (plus metrics-server, cert-manager, MetalLB, Traefik, Envoy Gateway and NFS storage), built by the reference solutions, beside a terminal |
+| **Playground** | a working cluster to try commands on, with no tasks and no grading: **Core** (HA control plane and two workers on v1.35) or **Full stack** (plus metrics-server, cert-manager, MetalLB, Traefik, Envoy Gateway and NFS storage), beside a terminal. The first build uses the reference solutions and is saved as a **live snapshot** (the VMs' memory included); every spin-up after that resumes the VMs already running, in about a minute |
 | **CKA dashboard** | a live `lab status` terminal card for the 7 VMs; exam readiness as a ring and a bar per domain (weighted like the exam); an "up next" card; labs passed (one square per lab, coloured by domain), checks passing, best mock exam, a 14-day activity chart; and the labs as a searchable, filterable card catalogue |
 | **Lab workspace** | the task (with its documentation links) beside a terminal; **Start** (or **Spin up**, when earlier labs it builds on aren't done), **Check**, **Clean up** stream their output live; a **Results** tab lists every check, grouped, with expected-vs-found; per-lab notes saved on the jump host; solutions behind a "try first" prompt |
 | **Terminals** | real login shells (xterm.js over a WebSocket to a PTY). Sessions live on the server, so a reload or a closed tab reattaches to the same shell; several tabs, renamed by double-clicking (names are kept on the server); JetBrains Mono Nerd Font, so prompt and `ls` icons render; code blocks in the task have a **paste** button that types into the shell without pressing Enter |
@@ -220,7 +220,7 @@ How it's built:
   text so it stays readable on white. The roadmap hero shows the kit's mascot.
   The page declares `color-scheme: only light` and `darkreader-lock`, so
   browser dark modes and the Dark Reader extension leave the design alone.
-  Navigation is **Roadmap · Playground · Cluster**; a certification's labs,
+  The top bar is light too, with the pages as pills. Navigation is **Roadmap · Playground · Cluster**; a certification's labs,
   speed drills and mock exams are tabs inside its track (`#/cka`,
   `#/cka/drills`, `#/cka/exams`). Interface text is Inter;
   anything you could type, the terminal included, is JetBrains Mono Nerd Font
@@ -317,7 +317,7 @@ reference solutions before running the lab's setup:
 lab up 22               # needs 10 and 20, which need 05 ... 01: builds what's missing, then starts 22
 lab exam 1 up           # the same for a mock exam (it assumes 07, 09, 23 and 25)
 lab exam 1 begin --snapshot   # prerequisites, a before-exam1 snapshot, then the exam: what the console's Start runs
-lab playground full     # a working cluster with the usual add-ons, nothing to grade
+lab playground full     # a working cluster with the usual add-ons: built once, then about a minute (live snapshot pg-full)
 ```
 
 A prerequisite counts as done when it passed `lab check`, was built by an

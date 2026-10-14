@@ -1934,13 +1934,19 @@ async function viewPlayground(main) {
 
   const spinUp = async pg => {
     if (!(await confirmSwitch("playground", pg.id, `the ${pg.name.toLowerCase()} playground`))) return;
+    const cached = S.overview?.playground_cached?.[pg.id];
     const labsByN = labsByNum();
     const mine = Object.values(labsByN).filter(l => l.started_at && !labPassed(l) && !l.provisioned && Number(l.num) <= 7);
-    const ok = await dialog({
-      title: `Spin up the ${pg.name.toLowerCase()}?`, confirm: "Spin up",
-      body: [p("The reference solutions build what's missing, out of sight; anything already in place is kept. From the cached core cluster that takes a few minutes, from bare Ubuntu half an hour or more."),
-        mine.length ? p(h("b", {}, "Heads up: "), `you've started lab${mine.length > 1 ? "s" : ""} ${mine.map(l => l.num).join(", ")} yourself. Spinning up finishes ${mine.length > 1 ? "them" : "it"} for you (marked as built, not as passed). Take a snapshot first if you want to come back to your own attempt.`) : null,
-        p("Nothing here is graded. Break things freely, and reset to a snapshot on the Cluster page when you're done.")],
+    const ok = await dialog(cached ? {
+      title: `Restore the ${pg.name.toLowerCase()}?`, confirm: "Restore", danger: true,
+      body: [p("It comes back from its live snapshot, memory included, so the VMs resume already running: about a minute."),
+        p(h("b", {}, "This replaces what's on the cluster now"), ", like a reset. Take a snapshot on the Cluster page first if you want to keep it. Your grades, notes and home directory are kept."),
+        p("Nothing here is graded. Break things freely.")],
+    } : {
+      title: `Build the ${pg.name.toLowerCase()}?`, confirm: "Build it",
+      body: [p("The first time, the reference solutions build it on the current cluster, out of sight: from the cached core a few minutes per add-on, from bare Ubuntu half an hour or more."),
+        p("When it's done it's saved as a live snapshot, with the VMs' memory. ", h("b", {}, "Every spin-up after that takes about a minute.")),
+        mine.length ? p(h("b", {}, "Heads up: "), `you've started lab${mine.length > 1 ? "s" : ""} ${mine.map(l => l.num).join(", ")} yourself. Building finishes ${mine.length > 1 ? "them" : "it"} for you (marked as built, not as passed). Take a snapshot first if you want to come back to your own attempt.`) : null],
     });
     if (ok) Jobs.start("playground", pg.id);
   };
@@ -1971,9 +1977,11 @@ async function viewPlayground(main) {
       h("div", { class: "check-section" }, "Spin up"),
       h("div", { class: "pg-presets" }, PLAYGROUNDS.map(pg => h("div", { class: "pg-card hud" + (a?.id === pg.id ? " on" : "") },
         h("div", { class: "pg-card-head" }, h("b", {}, pg.name), h("span", { class: "chip" }, `labs ${pg.labs}`)),
+        S.overview?.playground_cached?.[pg.id] ? h("span", { class: "state-badge done" }, "Ready in about a minute")
+          : h("span", { class: "state-badge active" }, "First build is slow, then about a minute"),
         h("ul", {}, pg.what.map(x => h("li", {}, x))),
         h("button", { class: "btn " + (a?.id === pg.id && a.phase === "ready" ? "" : "cta"), disabled: busy || !S.overview?.can_spin_up, onclick: () => spinUp(pg) },
-          a?.id === pg.id && a.phase === "preparing" ? "Preparing…" : a?.id === pg.id && a.phase === "ready" ? "Check it's all there" : "Spin up")))),
+          a?.id === pg.id && a.phase === "preparing" ? "Preparing…" : S.overview?.playground_cached?.[pg.id] ? "Restore" : "Build it")))),
       S.overview?.can_spin_up ? null : h("div", { class: "callout" }, "Spinning up needs the reference solutions on the jump host (infra/install-lab.sh --solutions)."),
       h("div", { class: "check-section" }, "Good to know"),
       h("ul", { class: "pg-tips" },
