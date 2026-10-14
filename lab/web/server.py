@@ -138,7 +138,21 @@ def render_params(md: str, values: dict, has_spec: bool) -> str:
     return re.sub(r"\{\{([A-Z_][A-Z0-9_]*)\}\}", sub, md)
 
 
-def lab_summary(d: Path, history: list) -> dict:
+def building_labs() -> set:
+    """Labs that build part of the cluster other labs, exams and drills stand on (as `lab up` sees it)."""
+    needs = {d.name.split("-", 1)[0]: read_meta(d / "meta").get("NEEDS", "").split() for d in lab_dirs()}
+    queue = [n for base in ("labs", "exams", "drills") if (LAB_HOME / base).exists()
+             for d in (LAB_HOME / base).iterdir() if (d / "meta").exists() for n in read_meta(d / "meta").get("NEEDS", "").split()]
+    seen = set()
+    while queue:
+        n = queue.pop()
+        if n not in seen:
+            seen.add(n)
+            queue += needs.get(n, [])
+    return seen
+
+
+def lab_summary(d: Path, history: list, building: set | None = None) -> dict:
     meta = read_meta(d / "meta")
     started = d.name
     started_file = LAB_STATE / "started" / started
@@ -157,6 +171,7 @@ def lab_summary(d: Path, history: list) -> dict:
         "has_solution": (LAB_SOLUTIONS / "labs" / d.name / "solution.md").exists(),
         "started_at": started_file.read_text().strip() if started_file.exists() else None,
         "provisioned": (LAB_STATE / "provisioned" / d.name).exists(),
+        "builds_cluster": d.name.split("-", 1)[0] in (building if building is not None else building_labs()),
         "result": read_json(LAB_STATE / "results" / f"{d.name}.json"),
         "best": max((a["pass"] / a["total"] for a in attempts if a.get("total")), default=None),
         "attempts": len(attempts),
@@ -570,7 +585,7 @@ async def api_overview(request):
     history = read_jsonl(LAB_STATE / "history.jsonl")
     return web.json_response({
         "activity": activity(history, read_jsonl(LAB_STATE / "exam-history.jsonl")),
-        "labs": [lab_summary(d, history) for d in lab_dirs()],
+        "labs": [lab_summary(d, history, building) for building in [building_labs()] for d in lab_dirs()],
         "exams": [exam_summary(d) for d in exam_dirs()],
         "solutions": LAB_SOLUTIONS.exists(),
         "can_spin_up": (LAB_SOLUTIONS / "labs").is_dir(),

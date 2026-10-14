@@ -142,6 +142,29 @@ function confirmSpinUp(what, missing) {
       p("From a bare cluster this can take half an hour or more. The output panel shows progress.")] });
 }
 
+// A lab that builds part of the cluster (01-05, the upgrade, MetalLB, ...) can't be done on a
+// cluster that already has it: after the playground, or after that lab or one built on it.
+// `lab up` then rolls the cluster back to bare Ubuntu and builds only what the lab needs.
+function clusterPast(lab) {
+  if (!lab.builds_cluster) return false;
+  const byNum = labsByNum(), done = l => l.provisioned || passedSinceReset(l);
+  const reaches = (l, seen) => l.num === lab.num || l.needs.some(n => !seen.has(n) && seen.add(n) && byNum[n] && reaches(byNum[n], seen));
+  return (S.overview?.labs || []).some(l => done(l) && reaches(l, new Set()));
+}
+
+function confirmFresh(lab) {
+  const byNum = labsByNum(), all = new Set(), queue = [...lab.needs];
+  while (queue.length) { const n = queue.shift(); if (!all.has(n)) { all.add(n); queue.push(...(byNum[n]?.needs || [])); } }
+  const list = [...all].sort(), why = p("The cluster already has what lab ", lab.num, " builds: the playground built it, or you did this lab or one that builds on it.");
+  if (!S.overview?.can_spin_up)
+    return dialog({ title: `Lab ${lab.num} is already built`, confirm: "Start anyway",
+      body: [why, p("Doing it again needs a cluster from before it: roll back to ", h("b", { class: "mono" }, "base"), " under Cluster, then build up to it yourself.")] });
+  return dialog({ title: `Start lab ${lab.num} on a fresh cluster?`, confirm: "Roll back and start",
+    body: [why,
+      p("Starting rolls the cluster back to bare Ubuntu", list.length ? [", then builds labs ", h("b", { class: "mono" }, list.join(", ")), " with the reference solutions, out of sight"] : "", ". Everything on the cluster now is lost; grades and notes stay."),
+      p(all.has("05") ? "From the cached core cluster that takes a few minutes." : list.length ? "Those are built from scratch: this can take 20 minutes." : "That takes a couple of minutes.")] });
+}
+
 // Starting something else while you're on a lab, drill, exam or the playground: say so first.
 async function confirmSwitch(kind, id, what) {
   const other = act();
@@ -1144,15 +1167,18 @@ async function viewLab(main, id, tabName) {
   const busy = () => !!S.jobs.current;
   // Start = `lab up`: builds missing prerequisite labs first (after asking), then runs setup.
   const startBtn = h("button", { class: "btn", onclick: async () => {
-    if (!(await confirmSwitch("lab", lab.id, `lab ${lab.num}`))) return;
-    if (await confirmSpinUp(`Lab ${lab.num}`, missingPrereqs(lab.needs))) Jobs.start(S.overview?.can_spin_up ? "lab-up" : "lab-start", lab.id);
+    const go = clusterPast(lab) ? await confirmFresh(lab)
+      : await confirmSwitch("lab", lab.id, `lab ${lab.num}`) && await confirmSpinUp(`Lab ${lab.num}`, missingPrereqs(lab.needs));
+    if (go) Jobs.start(S.overview?.can_spin_up ? "lab-up" : "lab-start", lab.id);
   } });
   const syncStartLabel = () => {
     const n = missingPrereqs(lab.needs).length;
     const a = actFor("lab", lab.id);
     if (a && a.phase === "preparing") { startBtn.textContent = "Preparing…"; startBtn.title = "Setup is running; follow it in the output panel"; return; }
-    startBtn.textContent = a && (a.phase === "failed" || a.phase === "interrupted") ? "Start again" : n ? "Spin up" : "Start";
-    startBtn.title = n ? `Builds the ${n} unfinished lab${n > 1 ? "s" : ""} this one needs, then starts it` : "Run this lab's setup";
+    const past = clusterPast(lab);
+    startBtn.textContent = a && (a.phase === "failed" || a.phase === "interrupted") ? "Start again" : past || n ? "Spin up" : "Start";
+    startBtn.title = past ? "The cluster is past this lab: rolls it back, builds what this lab needs, then starts it"
+      : n ? `Builds the ${n} unfinished lab${n > 1 ? "s" : ""} this one needs, then starts it` : "Run this lab's setup";
   };
   syncStartLabel();
   const checkBtn = h("button", { class: "btn solid", onclick: () => Jobs.start("lab-check", lab.id) }, "Check");

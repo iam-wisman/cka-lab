@@ -331,6 +331,14 @@ spoiled. It needs the private solutions installed (`install-lab.sh --solutions
 <dir>`); in the web console **Start** turns into **Spin up** and asks first.
 `lab list` shows those labs as "built by lab up".
 
+Some labs build part of the cluster that others stand on: 01–05, the upgrade
+(07), Helm, CRDs, MetalLB, ingress, Gateway API and NFS. Such a lab can't be
+done on a cluster that already has it (after the playground, or after you did it
+or a lab built on it). `lab up` then rolls the nodes back to `base` first and
+builds only what the lab needs. Lab 07 after the playground, for example, comes
+back on the cached v1.34 core in about two minutes. The console says so before it
+starts.
+
 The first spin-up from a bare cluster builds the core (labs 01–05) and caches it
 as the snapshot `up-core`, which takes about 20 minutes. After that, a spin-up
 from bare rolls the nodes back to `up-core` in a few minutes and builds only

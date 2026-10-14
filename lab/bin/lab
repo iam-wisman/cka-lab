@@ -140,6 +140,8 @@ cmd_start() {
   fi
   local needs; needs=$(meta "$d" NEEDS)
   [[ -n $needs ]] && info "This lab assumes these are done: $needs (lab up $id builds them)"
+  [[ ${FUNCNAME[1]} == cmd_up ]] || ! past_lab "$d" ||
+    info "${c_red}The cluster already has what $id builds.${c_off} For a clean attempt: lab up $id (rolls back and rebuilds what it needs)"
   if [[ -x $d/setup.sh ]]; then
     info "Preparing $id ..."
     GRADE_ID=$id bash "$d/setup.sh" "$@" || die "setup failed; fix the cluster (or lab reset) and retry"
@@ -271,10 +273,38 @@ cache_ok() {
   node_vm_snapshots | grep -qx "$CACHE_SNAP"
 }
 
+# Labs that build part of the cluster other labs, exams and drills stand on (01-05, the
+# upgrade, MetalLB, ...): their cleanup leaves what they built in place.
+building_labs() {
+  closure $(sed -n 's/^NEEDS="\(.*\)"/\1/p' "$LAB_HOME"/{labs,exams,drills}/*/meta 2>/dev/null)
+}
+
+# past_lab <lab dir>: the cluster already has what this lab builds (after the playground,
+# or after you did it), so doing it again there would be doing nothing.
+past_lab() {
+  local n; n=$(basename "$1"); n=${n%%-*}
+  building_labs | grep -qx "$n" && done_already "$1"
+}
+
+# back_to_base: the nodes and the jump host's lab state back to bare Ubuntu, as lab reset base.
+back_to_base() {
+  [[ -f $JUMP_SNAPS/base.tgz ]] || die "no 'base' snapshot of the jump host's lab state; run lab reset base yourself"
+  rollback_nodes base >/dev/null
+  jump_restore base || die "couldn't restore the jump host's lab state from base"
+  rm -f "$GRADER_KUBECONFIG" "$LAB_STATE/playground"
+  date +%s >"$LAB_STATE/last-reset"
+  local n
+  for n in "${K8S_NODES[@]}" nfs; do wait_for 300 node_up "$n" || die "$n didn't come back after the rollback to base"; done
+}
+
 cmd_up() {
-  local d; d=$(lab_dir "$1"); shift
+  local d id; d=$(lab_dir "$1"); id=$(basename "$d"); shift
+  if past_lab "$d"; then
+    info "The cluster already has what $id builds: rolling it back to bare Ubuntu, then building only what $id needs"
+    back_to_base
+  fi
   provision $(meta "$d" NEEDS)
-  cmd_start "$(basename "$d")" "$@"
+  cmd_start "$id" "$@"
 }
 
 # run_cleanup <script> <label> [--yes]: show what will run, confirm, run it.
