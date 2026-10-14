@@ -13,13 +13,13 @@ jobs:
   checks:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Bash syntax
         run: |
           for f in lab/bin/lab $(find lab infra tools -name '*.sh'); do bash -n "$f" || exit 1; done
       - name: ShellCheck (errors)
         run: shellcheck -S error lab/bin/lab $(find lab infra tools -name '*.sh')
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: JavaScript syntax
@@ -40,7 +40,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Documentation links resolve
         run: tools/check-links.sh
       - name: Pinned versions and curricula vs upstream (report only)
