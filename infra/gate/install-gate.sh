@@ -43,13 +43,22 @@ pw=${WEB_PASSWORD:-$(cat "$CA_DIR/student-password" 2>/dev/null || true)}
 
 # --- the container ---------------------------------------------------------------
 if pve "pct status $CTID" >/dev/null 2>&1; then
-  [[ $(pve "pct config $CTID" | sed -n 's/^hostname: //p') == helmyard-gate ]] ||
+  conf=$(pve "pct config $CTID")
+  [[ $(sed -n 's/^hostname: //p' <<<"$conf") == helmyard-gate ]] ||
     { echo "CT $CTID exists and isn't helmyard-gate; pick another with --ctid" >&2; exit 1; }
-  echo "[gate] container $CTID exists"
-else
+  if [[ $(sed -n 's/^arch: //p' <<<"$conf") != amd64 ]]; then
+    # An earlier run of this script picked the arm64 template, which can't start here: replace it.
+    echo "[gate] container $CTID was built for $(sed -n 's/^arch: //p' <<<"$conf"); recreating it"
+    pve "pct stop $CTID >/dev/null 2>&1; pct destroy $CTID --purge >/dev/null"
+    pve "pveam list local | awk '/alpine-.*_arm64/ {print \$1}' | xargs -r -n1 pveam remove"
+  else
+    echo "[gate] container $CTID exists"
+  fi
+fi
+if ! pve "pct status $CTID" >/dev/null 2>&1; then
   pve "qm status $CTID" >/dev/null 2>&1 && { echo "VM $CTID exists; pick another id with --ctid" >&2; exit 1; }
   echo "[gate] creating container $CTID (Alpine, 128 MB)"
-  tmpl=$(pve "pveam update >/dev/null 2>&1; pveam available --section system" | awk '/alpine-3\.[0-9]+-default/ {print $2}' | sort -V | tail -1)
+  tmpl=$(pve "pveam update >/dev/null 2>&1; pveam available --section system" | awk '/alpine-3\.[0-9]+-default_.*_amd64\./ {print $2}' | sort -V | tail -1)
   [[ -n $tmpl ]] || { echo "no Alpine template offered by pveam" >&2; exit 1; }
   pve "pveam list local | grep -q '$tmpl' || pveam download local '$tmpl' >/dev/null"
   pve "pct create $CTID local:vztmpl/$tmpl --hostname helmyard-gate --description 'HelmYard gate: starts the lab again (infra/gate)' \
