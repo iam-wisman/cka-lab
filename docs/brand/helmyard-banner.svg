@@ -14,5 +14,5 @@
   <rect x="53" y="67" width="14" height="4" rx="1.2" fill="#4c5d80"/>
   <circle cx="64.3" cy="63" r="1.1" fill="#1CD1A1"/><circle cx="64.3" cy="69" r="1.1" fill="#FF8E3C"/></g>
   <text x="480" y="300" text-anchor="middle" font-family="Nunito, 'Arial Rounded MT Bold', 'Open Sans', Arial, sans-serif" font-size="86" font-weight="800"><tspan fill="#ffffff">Helm</tspan><tspan fill="#FF8E3C">Yard</tspan></text>
-  <text x="480" y="348" text-anchor="middle" font-family="Nunito, 'Arial Rounded MT Bold', 'Open Sans', Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="4" fill="#326CE5">KUBERNETES PLAYGROUNDS</text>
+  <text x="480" y="348" text-anchor="middle" font-family="Nunito, 'Arial Rounded MT Bold', 'Open Sans', Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="4" fill="#8A99AD">KUBERNETES PLAYGROUNDS</text>
 </svg>

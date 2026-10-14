@@ -1,0 +1,20 @@
+:root, [data-theme="dark"] {
+  --hy-bg-canvas: #0E1E38;
+  --hy-bg-surface: #162B4D;
+  --hy-color-primary: #326CE5;
+  --hy-color-accent: #FF8E3C;
+  --hy-color-success: #1CD1A1;
+  --hy-text-primary: #FFFFFF;
+  --hy-text-secondary: #8A99AD;
+  --hy-font-sans: 'Inter', 'Aptos', system-ui, -apple-system, sans-serif;
+  --hy-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+[data-theme="light"] {
+  --hy-bg-canvas: #F8FAFC;
+  --hy-bg-surface: #FFFFFF;
+  --hy-color-primary: #326CE5;
+  --hy-color-accent: #E87420;
+  --hy-color-success: #0FA97F;
+  --hy-text-primary: #0E1E38;
+  --hy-text-secondary: #475569;
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 150" width="520" height="150">
+  <text x="260" y="76" text-anchor="middle" font-family="'Inter', 'Aptos', system-ui, sans-serif" font-weight="800" font-size="56" letter-spacing="-1">
+    <tspan fill="#0E1E38">Helm</tspan><tspan fill="#FF8E3C">Yard</tspan>
+  </text>
+  <text x="260" y="110" text-anchor="middle" font-family="'Inter', 'Aptos', system-ui, sans-serif" font-weight="700" font-size="15" letter-spacing="4.5" fill="#326CE5">
+    KUBERNETES PLAYGROUNDS
+  </text>
+</svg>

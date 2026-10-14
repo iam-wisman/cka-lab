@@ -25,7 +25,7 @@
   --slate: #403f4c;
   --mint: #c0e0de;
 
-  /* HelmYard brand kit (docs/brand/kit/palettes): navy canvas, orange accent, teal = healthy */
+  /* HelmYard brand kit (docs/brand/kit/04_Color_System_and_Tokens): navy canvas, orange accent, teal = healthy */
   --hy-navy: #0E1E38;
   --hy-orange: #FF8E3C;
   --hy-teal: #1CD1A1;
@@ -53,7 +53,7 @@
 
   /* terminal: always a dark screen */
   --screen: #0E1E38;
-  --screen-2: #182c4f;
+  --screen-2: #162B4D;  /* kit: Deep Surface */
   --screen-rule: rgba(138, 153, 173, .2);
   --screen-ink: #eef3fb;
   --screen-muted: #8A99AD;

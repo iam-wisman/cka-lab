@@ -12,7 +12,7 @@ import math, os, shutil
 here = os.path.dirname(os.path.abspath(__file__))
 web = os.path.join(here, "..", "..", "lab", "web", "static", "brand")
 
-# Official palette: docs/brand/kit/palettes/colors.json
+# Official palette: docs/brand/kit/04_Color_System_and_Tokens/tokens.w3c.json
 ORANGE, GREEN, NAVY = "#FF8E3C", "#1CD1A1", "#0E1E38"
 VARIANTS = {   # wheel, wheel shade, hub, dots
     "color":   ("#326CE5", "#2554b8", "#fff7ec", ("#fff7ec", ORANGE)),
@@ -53,7 +53,7 @@ def banner():
   <rect width="960" height="390" rx="18" fill="{NAVY}"/>
   {mark("color", False, 375, 18, 210)}
   <text x="480" y="300" text-anchor="middle" font-family="{font}" font-size="86" font-weight="800"><tspan fill="#ffffff">Helm</tspan><tspan fill="{ORANGE}">Yard</tspan></text>
-  <text x="480" y="348" text-anchor="middle" font-family="{font}" font-size="26" font-weight="700" letter-spacing="4" fill="#326CE5">KUBERNETES PLAYGROUNDS</text>
+  <text x="480" y="348" text-anchor="middle" font-family="{font}" font-size="26" font-weight="700" letter-spacing="4" fill="#8A99AD">KUBERNETES PLAYGROUNDS</text>
 </svg>
 '''
 

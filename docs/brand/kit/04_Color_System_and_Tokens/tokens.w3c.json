@@ -1,0 +1,34 @@
+{
+  "helmyard": {
+    "color": {
+      "night-navy": {
+        "$value": "#0E1E38",
+        "$type": "color"
+      },
+      "deep-surface": {
+        "$value": "#162B4D",
+        "$type": "color"
+      },
+      "kube-blue": {
+        "$value": "#326CE5",
+        "$type": "color"
+      },
+      "playground-orange": {
+        "$value": "#FF8E3C",
+        "$type": "color"
+      },
+      "lively-teal": {
+        "$value": "#1CD1A1",
+        "$type": "color"
+      },
+      "cloud-white": {
+        "$value": "#FFFFFF",
+        "$type": "color"
+      },
+      "slate-gray": {
+        "$value": "#8A99AD",
+        "$type": "color"
+      }
+    }
+  }
+}
