@@ -1,82 +1,383 @@
 {
-  "_comment": "The Kubestronaut tracks. Domains and weights are from the CNCF curricula (github.com/cncf/curriculum); tools/check-versions.py reports when a newer curriculum appears. 'root' is where a hands-on track's labs/, exams/ and drills/ live, relative to lab/. Quiz tracks keep their question banks in the private solutions repo (questions/<track>/), so answers are never in the public repo.",
+  "_comment": "The Kubestronaut tracks. Domains and weights are from the CNCF curricula (github.com/cncf/curriculum); tools/check-versions.py reports when a newer curriculum appears. 'root' is where a hands-on track's labs/, exams/ and drills/ live, relative to lab/. Quiz tracks keep their question banks in the private solutions repo (questions/<track>/), so answers are never in the public repo. Tracks are listed in roadmap order (CKA, CKS, CKAD, KCNA, KCSA); 'step' and 'pitch' drive the roadmap page.",
   "tracks": [
     {
-      "id": "cka", "name": "Certified Kubernetes Administrator", "short": "CKA", "kind": "hands-on",
-      "curriculum": "1.35", "root": ".", "minutes": 120, "pass": 66, "status": "ready",
+      "id": "cka",
+      "name": "Certified Kubernetes Administrator",
+      "short": "CKA",
+      "kind": "hands-on",
+      "curriculum": "1.35",
+      "root": ".",
+      "minutes": 120,
+      "pass": 66,
+      "status": "ready",
       "domains": [
-        {"key": "Trouble", "name": "Troubleshooting", "weight": 30},
-        {"key": "Arch", "name": "Cluster Architecture, Installation & Configuration", "short": "Architecture", "weight": 25},
-        {"key": "Network", "name": "Services & Networking", "short": "Networking", "weight": 20},
-        {"key": "Workloads", "name": "Workloads & Scheduling", "short": "Workloads", "weight": 15},
-        {"key": "Storage", "name": "Storage", "weight": 10}
-      ]
+        {
+          "key": "Trouble",
+          "name": "Troubleshooting",
+          "weight": 30
+        },
+        {
+          "key": "Arch",
+          "name": "Cluster Architecture, Installation & Configuration",
+          "short": "Architecture",
+          "weight": 25
+        },
+        {
+          "key": "Network",
+          "name": "Services & Networking",
+          "short": "Networking",
+          "weight": 20
+        },
+        {
+          "key": "Workloads",
+          "name": "Workloads & Scheduling",
+          "short": "Workloads",
+          "weight": 15
+        },
+        {
+          "key": "Storage",
+          "name": "Storage",
+          "weight": 10
+        }
+      ],
+      "step": 1,
+      "pitch": "Build, run and repair a real HA cluster from bare Ubuntu. Everything after this assumes it."
     },
     {
-      "id": "ckad", "name": "Certified Kubernetes Application Developer", "short": "CKAD", "kind": "hands-on",
-      "curriculum": "1.37", "root": "tracks/ckad", "minutes": 120, "pass": 66, "status": "planned",
+      "id": "cks",
+      "name": "Certified Kubernetes Security Specialist",
+      "short": "CKS",
+      "kind": "hands-on",
+      "curriculum": "1.34",
+      "root": "tracks/cks",
+      "minutes": 120,
+      "pass": 67,
+      "status": "planned",
+      "requires": "cka",
       "domains": [
-        {"key": "Env", "name": "Application Environment, Configuration and Security", "short": "Environment & Security", "weight": 25,
-         "topics": ["CRDs and Operators", "Authentication, authorization and admission control", "Requests, limits, quotas", "Resource requirements", "ConfigMaps", "Secrets", "ServiceAccounts", "SecurityContexts and capabilities"]},
-        {"key": "Design", "name": "Application Design and Build", "short": "Design & Build", "weight": 20,
-         "topics": ["Build and modify container images", "Choose the right workload resource", "Multi-container Pod patterns (sidecar, init, ...)", "Persistent and ephemeral volumes"]},
-        {"key": "Deploy", "name": "Application Deployment", "short": "Deployment", "weight": 20,
-         "topics": ["Blue/green and canary with Kubernetes primitives", "Deployments and rolling updates", "Helm", "Kustomize"]},
-        {"key": "Net", "name": "Services and Networking", "short": "Networking", "weight": 20,
-         "topics": ["NetworkPolicies", "Access to applications via Services", "Ingress rules"]},
-        {"key": "Obs", "name": "Application Observability and Maintenance", "short": "Observability", "weight": 15,
-         "topics": ["API deprecations", "Probes and health checks", "Built-in CLI monitoring", "Container logs", "Debugging"]}
-      ]
+        {
+          "key": "Micro",
+          "name": "Minimize Microservice Vulnerabilities",
+          "short": "Microservices",
+          "weight": 20,
+          "topics": [
+            "Pod Security Standards",
+            "Kubernetes Secrets",
+            "Isolation (multi-tenancy, sandboxed containers)",
+            "Pod-to-Pod encryption (Cilium, Istio)"
+          ]
+        },
+        {
+          "key": "Supply",
+          "name": "Supply Chain Security",
+          "short": "Supply chain",
+          "weight": 20,
+          "topics": [
+            "Minimal base images",
+            "SBOM, CI/CD, artifact repositories",
+            "Permitted registries, signing and verification",
+            "Static analysis (Kubesec, KubeLinter)"
+          ]
+        },
+        {
+          "key": "Runtime",
+          "name": "Monitoring, Logging and Runtime Security",
+          "short": "Runtime",
+          "weight": 20,
+          "topics": [
+            "Behavioural analytics",
+            "Threat detection",
+            "Attack phases and bad actors",
+            "Immutable containers",
+            "Audit logs"
+          ]
+        },
+        {
+          "key": "Setup",
+          "name": "Cluster Setup",
+          "short": "Setup",
+          "weight": 15,
+          "topics": [
+            "Network policies for cluster access",
+            "CIS benchmark (kube-bench)",
+            "Ingress with TLS",
+            "Node metadata and endpoints",
+            "Verify platform binaries"
+          ]
+        },
+        {
+          "key": "Harden",
+          "name": "Cluster Hardening",
+          "short": "Hardening",
+          "weight": 15,
+          "topics": [
+            "RBAC",
+            "ServiceAccounts",
+            "API access",
+            "Upgrades"
+          ]
+        },
+        {
+          "key": "System",
+          "name": "System Hardening",
+          "short": "System",
+          "weight": 10,
+          "topics": [
+            "Host OS footprint",
+            "Least-privilege IAM",
+            "External network access",
+            "AppArmor, seccomp"
+          ]
+        }
+      ],
+      "step": 2,
+      "pitch": "Harden the cluster you built: CIS benchmarks, RBAC, admission, runtime security, supply chain."
     },
     {
-      "id": "cks", "name": "Certified Kubernetes Security Specialist", "short": "CKS", "kind": "hands-on",
-      "curriculum": "1.34", "root": "tracks/cks", "minutes": 120, "pass": 67, "status": "planned", "requires": "cka",
+      "id": "ckad",
+      "name": "Certified Kubernetes Application Developer",
+      "short": "CKAD",
+      "kind": "hands-on",
+      "curriculum": "1.37",
+      "root": "tracks/ckad",
+      "minutes": 120,
+      "pass": 66,
+      "status": "planned",
       "domains": [
-        {"key": "Micro", "name": "Minimize Microservice Vulnerabilities", "short": "Microservices", "weight": 20,
-         "topics": ["Pod Security Standards", "Kubernetes Secrets", "Isolation (multi-tenancy, sandboxed containers)", "Pod-to-Pod encryption (Cilium, Istio)"]},
-        {"key": "Supply", "name": "Supply Chain Security", "short": "Supply chain", "weight": 20,
-         "topics": ["Minimal base images", "SBOM, CI/CD, artifact repositories", "Permitted registries, signing and verification", "Static analysis (Kubesec, KubeLinter)"]},
-        {"key": "Runtime", "name": "Monitoring, Logging and Runtime Security", "short": "Runtime", "weight": 20,
-         "topics": ["Behavioural analytics", "Threat detection", "Attack phases and bad actors", "Immutable containers", "Audit logs"]},
-        {"key": "Setup", "name": "Cluster Setup", "short": "Setup", "weight": 15,
-         "topics": ["Network policies for cluster access", "CIS benchmark (kube-bench)", "Ingress with TLS", "Node metadata and endpoints", "Verify platform binaries"]},
-        {"key": "Harden", "name": "Cluster Hardening", "short": "Hardening", "weight": 15,
-         "topics": ["RBAC", "ServiceAccounts", "API access", "Upgrades"]},
-        {"key": "System", "name": "System Hardening", "short": "System", "weight": 10,
-         "topics": ["Host OS footprint", "Least-privilege IAM", "External network access", "AppArmor, seccomp"]}
-      ]
+        {
+          "key": "Env",
+          "name": "Application Environment, Configuration and Security",
+          "short": "Environment & Security",
+          "weight": 25,
+          "topics": [
+            "CRDs and Operators",
+            "Authentication, authorization and admission control",
+            "Requests, limits, quotas",
+            "Resource requirements",
+            "ConfigMaps",
+            "Secrets",
+            "ServiceAccounts",
+            "SecurityContexts and capabilities"
+          ]
+        },
+        {
+          "key": "Design",
+          "name": "Application Design and Build",
+          "short": "Design & Build",
+          "weight": 20,
+          "topics": [
+            "Build and modify container images",
+            "Choose the right workload resource",
+            "Multi-container Pod patterns (sidecar, init, ...)",
+            "Persistent and ephemeral volumes"
+          ]
+        },
+        {
+          "key": "Deploy",
+          "name": "Application Deployment",
+          "short": "Deployment",
+          "weight": 20,
+          "topics": [
+            "Blue/green and canary with Kubernetes primitives",
+            "Deployments and rolling updates",
+            "Helm",
+            "Kustomize"
+          ]
+        },
+        {
+          "key": "Net",
+          "name": "Services and Networking",
+          "short": "Networking",
+          "weight": 20,
+          "topics": [
+            "NetworkPolicies",
+            "Access to applications via Services",
+            "Ingress rules"
+          ]
+        },
+        {
+          "key": "Obs",
+          "name": "Application Observability and Maintenance",
+          "short": "Observability",
+          "weight": 15,
+          "topics": [
+            "API deprecations",
+            "Probes and health checks",
+            "Built-in CLI monitoring",
+            "Container logs",
+            "Debugging"
+          ]
+        }
+      ],
+      "step": 3,
+      "pitch": "Design, ship and debug applications on Kubernetes: workloads, Helm, Kustomize, probes, security contexts."
     },
     {
-      "id": "kcna", "name": "Kubernetes and Cloud Native Associate", "short": "KCNA", "kind": "quiz",
-      "curriculum": "current", "minutes": 90, "questions": 60, "pass": 75, "status": "planned",
+      "id": "kcna",
+      "name": "Kubernetes and Cloud Native Associate",
+      "short": "KCNA",
+      "kind": "quiz",
+      "curriculum": "current",
+      "minutes": 90,
+      "questions": 60,
+      "pass": 75,
+      "status": "planned",
       "domains": [
-        {"key": "Fund", "name": "Kubernetes Fundamentals", "short": "Fundamentals", "weight": 44,
-         "topics": ["Core concepts", "Administration", "Scheduling", "Containerization"]},
-        {"key": "Orch", "name": "Container Orchestration", "short": "Orchestration", "weight": 28,
-         "topics": ["Networking", "Security", "Troubleshooting", "Storage"]},
-        {"key": "Deliv", "name": "Cloud Native Application Delivery", "short": "Delivery", "weight": 16,
-         "topics": ["Application delivery", "Debugging"]},
-        {"key": "Arch", "name": "Cloud Native Architecture", "short": "Architecture", "weight": 12,
-         "topics": ["Observability", "Ecosystem and principles", "Community and collaboration"]}
-      ]
+        {
+          "key": "Fund",
+          "name": "Kubernetes Fundamentals",
+          "short": "Fundamentals",
+          "weight": 44,
+          "topics": [
+            "Core concepts",
+            "Administration",
+            "Scheduling",
+            "Containerization"
+          ]
+        },
+        {
+          "key": "Orch",
+          "name": "Container Orchestration",
+          "short": "Orchestration",
+          "weight": 28,
+          "topics": [
+            "Networking",
+            "Security",
+            "Troubleshooting",
+            "Storage"
+          ]
+        },
+        {
+          "key": "Deliv",
+          "name": "Cloud Native Application Delivery",
+          "short": "Delivery",
+          "weight": 16,
+          "topics": [
+            "Application delivery",
+            "Debugging"
+          ]
+        },
+        {
+          "key": "Arch",
+          "name": "Cloud Native Architecture",
+          "short": "Architecture",
+          "weight": 12,
+          "topics": [
+            "Observability",
+            "Ecosystem and principles",
+            "Community and collaboration"
+          ]
+        }
+      ],
+      "step": 4,
+      "pitch": "Multiple choice across the cloud native landscape. After three hands-on exams it's mostly revision."
     },
     {
-      "id": "kcsa", "name": "Kubernetes and Cloud Native Security Associate", "short": "KCSA", "kind": "quiz",
-      "curriculum": "current", "minutes": 90, "questions": 60, "pass": 75, "status": "planned",
+      "id": "kcsa",
+      "name": "Kubernetes and Cloud Native Security Associate",
+      "short": "KCSA",
+      "kind": "quiz",
+      "curriculum": "current",
+      "minutes": 90,
+      "questions": 60,
+      "pass": 75,
+      "status": "planned",
       "domains": [
-        {"key": "Comp", "name": "Kubernetes Cluster Component Security", "short": "Components", "weight": 22,
-         "topics": ["API server", "Controller manager", "Scheduler", "Kubelet", "Container runtime", "kube-proxy", "Pod", "etcd", "Container networking", "Client security", "Storage"]},
-        {"key": "Fund", "name": "Kubernetes Security Fundamentals", "short": "Fundamentals", "weight": 22,
-         "topics": ["Pod Security Standards", "Pod Security Admission", "Authentication", "Authorization", "Secrets", "Isolation and segmentation", "Audit logging", "Network Policy"]},
-        {"key": "Threat", "name": "Kubernetes Threat Model", "short": "Threat model", "weight": 16,
-         "topics": ["Trust boundaries and data flow", "Persistence", "Denial of service", "Malicious code and compromised containers", "Attacker on the network", "Access to sensitive data", "Privilege escalation"]},
-        {"key": "Platform", "name": "Platform Security", "short": "Platform", "weight": 16,
-         "topics": ["Supply chain security", "Image repository", "Observability", "Service mesh", "PKI", "Connectivity", "Admission control"]},
-        {"key": "Overview", "name": "Overview of Cloud Native Security", "short": "Overview", "weight": 14,
-         "topics": ["The 4Cs", "Cloud provider and infrastructure security", "Controls and frameworks", "Isolation techniques", "Artifact repository and image security", "Workload and application code security"]},
-        {"key": "Compliance", "name": "Compliance and Security Frameworks", "short": "Compliance", "weight": 10,
-         "topics": ["Compliance frameworks", "Threat modeling frameworks", "Supply chain compliance", "Automation and tooling"]}
-      ]
+        {
+          "key": "Comp",
+          "name": "Kubernetes Cluster Component Security",
+          "short": "Components",
+          "weight": 22,
+          "topics": [
+            "API server",
+            "Controller manager",
+            "Scheduler",
+            "Kubelet",
+            "Container runtime",
+            "kube-proxy",
+            "Pod",
+            "etcd",
+            "Container networking",
+            "Client security",
+            "Storage"
+          ]
+        },
+        {
+          "key": "Fund",
+          "name": "Kubernetes Security Fundamentals",
+          "short": "Fundamentals",
+          "weight": 22,
+          "topics": [
+            "Pod Security Standards",
+            "Pod Security Admission",
+            "Authentication",
+            "Authorization",
+            "Secrets",
+            "Isolation and segmentation",
+            "Audit logging",
+            "Network Policy"
+          ]
+        },
+        {
+          "key": "Threat",
+          "name": "Kubernetes Threat Model",
+          "short": "Threat model",
+          "weight": 16,
+          "topics": [
+            "Trust boundaries and data flow",
+            "Persistence",
+            "Denial of service",
+            "Malicious code and compromised containers",
+            "Attacker on the network",
+            "Access to sensitive data",
+            "Privilege escalation"
+          ]
+        },
+        {
+          "key": "Platform",
+          "name": "Platform Security",
+          "short": "Platform",
+          "weight": 16,
+          "topics": [
+            "Supply chain security",
+            "Image repository",
+            "Observability",
+            "Service mesh",
+            "PKI",
+            "Connectivity",
+            "Admission control"
+          ]
+        },
+        {
+          "key": "Overview",
+          "name": "Overview of Cloud Native Security",
+          "short": "Overview",
+          "weight": 14,
+          "topics": [
+            "The 4Cs",
+            "Cloud provider and infrastructure security",
+            "Controls and frameworks",
+            "Isolation techniques",
+            "Artifact repository and image security",
+            "Workload and application code security"
+          ]
+        },
+        {
+          "key": "Compliance",
+          "name": "Compliance and Security Frameworks",
+          "short": "Compliance",
+          "weight": 10,
+          "topics": [
+            "Compliance frameworks",
+            "Threat modeling frameworks",
+            "Supply chain compliance",
+            "Automation and tooling"
+          ]
+        }
+      ],
+      "step": 5,
+      "pitch": "Multiple choice on cloud native security and threat models. The last step to Kubestronaut."
     }
   ]
 }

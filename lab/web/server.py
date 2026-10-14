@@ -10,6 +10,11 @@ Runs on the jump host as `student` (systemd unit lab-web.service) and serves:
   - jobs: the existing `lab` commands (start, check, cleanup, exam, snapshot,
     reset), run one at a time with their output streamed to the page
   - cluster status: VM power state from Proxmox, node status from Kubernetes
+  - what you're working on (a lab, drill, exam or the playground) and how far its
+    setup is, kept on disk, so it shows wherever you look and survives a reload
+  - power: the cluster VMs are started by the lab commands that need them, and
+    everything (cluster, then this jump host) shuts down after IDLE minutes without
+    use. The gate on Proxmox (infra/gate) starts it all again.
 
 Everything the web console does, the `lab` CLI can do too; this file adds no
 grading or setup logic of its own.
@@ -494,6 +499,8 @@ async def security(request, handler):
             raise web.HTTPForbidden(text="missing X-Lab header")
         if not same_origin(request):
             raise web.HTTPForbidden(text="cross-origin request refused")
+        if not (request.method == "GET" and (path in PASSIVE or path.endswith("/stream") or path.endswith("/ws"))):
+            touch()
     resp = await handler(request)
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "no-referrer")
@@ -643,22 +650,120 @@ async def api_put_note(request):
 
 # --- jobs: `lab` commands with streamed output -------------------------------------------
 
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+JOBS_DIR = WEB_STATE / "jobs"
+
+
 class Job:
-    def __init__(self, jid, action, target, argv, label):
+    def __init__(self, jid, action, target, argv, label, subject=None):
         self.id, self.action, self.target, self.argv, self.label = jid, action, target, argv, label
+        self.subject = subject          # {"kind", "id", "title"} of what this job prepares, or None
         self.chunks: list = []
         self.started = time.time()
         self.ended = None
         self.code = None
         self.cond = asyncio.Condition()
 
+    def progress(self) -> str:
+        """The last line the command printed: what it's doing right now."""
+        tail = ANSI_RE.sub("", "".join(self.chunks[-40:])).replace("\r", "\n")
+        lines = [l.strip() for l in tail.splitlines() if l.strip()]
+        return lines[-1][:160] if lines else ""
+
     def info(self):
         return {"id": self.id, "action": self.action, "target": self.target, "label": self.label,
-                "started": self.started, "ended": self.ended, "code": self.code}
+                "started": self.started, "ended": self.ended, "code": self.code, "subject": self.subject,
+                "progress": self.progress()}
+
+    def save(self):
+        """Keep finished jobs on disk, so their output survives a restart of the console."""
+        try:
+            JOBS_DIR.mkdir(parents=True, exist_ok=True)
+            (JOBS_DIR / f"{self.id}.log").write_text("".join(self.chunks))
+            (JOBS_DIR / f"{self.id}.json").write_text(json.dumps(self.info() | {"argv": self.argv}))
+            for old in sorted(JOBS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)[:-30]:
+                old.unlink(missing_ok=True)
+                old.with_suffix(".log").unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def load_jobs():
+    """Finished jobs from earlier runs of the console; a job cut off by a restart shows as such."""
+    for f in sorted(JOBS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)[-20:] if JOBS_DIR.exists() else []:
+        try:
+            d = json.loads(f.read_text())
+            j = Job(d["id"], d["action"], d["target"], d.get("argv", []), d["label"], d.get("subject"))
+            j.started, j.ended, j.code = d["started"], d.get("ended") or d["started"], d.get("code", -1)
+            j.chunks = [f.with_suffix(".log").read_text()] if f.with_suffix(".log").exists() else []
+            JOBS[j.id] = j
+        except (OSError, ValueError, KeyError):
+            continue
 
 
 JOBS: dict = {}
 CURRENT: dict = {"job": None}
+
+
+# --- what you're working on ----------------------------------------------------------------
+#
+# One thing at a time, as the cluster is shared: a lab, a drill, a mock exam or the
+# playground. Its phase: preparing (setup running), ready, failed (setup failed) or
+# interrupted (the console restarted mid-setup). Kept in a file, so it outlives the tab.
+
+ACTIVITY_FILE = WEB_STATE / "activity.json"
+
+
+def activity_get():
+    return read_json(ACTIVITY_FILE)
+
+
+def activity_set(a):
+    WEB_STATE.mkdir(parents=True, exist_ok=True)
+    if a is None:
+        ACTIVITY_FILE.unlink(missing_ok=True)
+        return
+    a["updated"] = int(time.time())
+    tmp = WEB_STATE / ".activity.tmp"
+    tmp.write_text(json.dumps(a))
+    tmp.replace(ACTIVITY_FILE)
+
+
+def job_subject(action: str, target: str):
+    """What a start-like job sets up, for the activity record. None for every other job."""
+    if action in ("lab-start", "lab-up"):
+        d = find_lab(target)
+        return {"kind": "lab", "id": d.name, "num": d.name[:2], "title": read_meta(d / "meta").get("TITLE", d.name)}
+    if action == "drill-start":
+        d = find_drill(target)
+        return {"kind": "drill", "id": d.name, "num": d.name[:2], "title": read_meta(d / "meta").get("TITLE", d.name)}
+    if action in ("exam-start", "exam-prep", "exam-begin"):
+        return {"kind": "exam", "id": target, "num": target, "title": f"Mock exam {target}"}
+    if action == "playground":
+        return {"kind": "playground", "id": target, "num": "", "title": f"Playground ({target})"}
+    return None
+
+
+def same_subject(a, kind: str, target: str) -> bool:
+    return bool(a) and a.get("kind") == kind and target in (a.get("id"), a.get("num"))
+
+
+def job_finished(job):
+    """Move the activity on when a job ends."""
+    a = activity_get()
+    if job.subject:
+        if a and a.get("job") == job.id:
+            if job.code == 0:
+                a.update(phase="ready" if job.action != "exam-prep" else "prepared", ready_at=int(time.time()), error=None)
+            else:
+                a.update(phase="failed", error=job.progress())
+            activity_set(a)
+        return
+    kind = job.action.split("-", 1)[0]
+    if job.code == 0 and job.action in ("lab-cleanup", "drill-cleanup", "exam-cleanup") and same_subject(a, kind, job.target):
+        activity_set(None)
+    elif job.code == 0 and job.action == "reset" and a:
+        activity_set(None)          # the cluster went back to a snapshot: what was set up is gone
 
 
 def job_argv(action: str, target: str, arg: str):
@@ -683,6 +788,9 @@ def job_argv(action: str, target: str, arg: str):
             return [LAB_BIN, "exam", n, sub], None, f"lab exam {n} {sub}"
         if sub == "cleanup":
             return [LAB_BIN, "exam", n, "cleanup", "--yes"], None, f"lab exam {n} cleanup"
+        if sub == "begin":
+            snap = ["--snapshot"] if arg == "snapshot" else []
+            return [LAB_BIN, "exam", n, "begin"] + snap, None, f"lab exam {n} begin {' '.join(snap)}".strip()
     if action.startswith("drill-"):
         drill_id = find_drill(target).name
         sub = action[6:]
@@ -690,6 +798,14 @@ def job_argv(action: str, target: str, arg: str):
             return [LAB_BIN, "drill", drill_id], None, f"lab drill {drill_id}"
         if sub in ("check", "cleanup"):
             return [LAB_BIN, "drill", sub, drill_id], None, f"lab drill {sub} {drill_id}"
+    if action == "playground":
+        if target not in ("core", "full"):
+            raise web.HTTPBadRequest(text="unknown playground")
+        return [LAB_BIN, "playground", target], None, f"lab playground {target}"
+    if action == "power":
+        if target not in ("on", "off", "shutdown"):
+            raise web.HTTPBadRequest(text="unknown power action")
+        return [LAB_BIN, "power", target], None, f"lab power {target}"
     if action in ("snapshot", "reset", "snapshot-delete"):
         if not SNAP_RE.match(target):
             raise web.HTTPBadRequest(text="invalid snapshot name")
@@ -728,6 +844,12 @@ async def run_job(job: Job, stdin: bytes | None):
         job.cond.notify_all()
     if CURRENT["job"] is job:
         CURRENT["job"] = None
+    try:
+        job_finished(job)
+    except Exception:  # pragma: no cover - never let bookkeeping break the job runner
+        pass
+    job.save()
+    touch()
 
 
 async def api_start_job(request):
@@ -736,8 +858,14 @@ async def api_start_job(request):
     if CURRENT["job"] is not None:
         raise web.HTTPConflict(text=f"'{CURRENT['job'].label}' is still running")
     argv, stdin, label = job_argv(action, target, arg)
-    job = Job(secrets.token_hex(6), action, target, argv, label)
+    job = Job(secrets.token_hex(6), action, target, argv, label, job_subject(action, target))
     JOBS[job.id] = job
+    if job.subject:
+        activity_set(dict(job.subject, phase="preparing", job=job.id, since=int(time.time()), arg=arg or None))
+    elif action.endswith("-check") and same_subject(activity_get(), action.split("-", 1)[0], target):
+        a = activity_get()
+        a["checked_at"] = int(time.time())
+        activity_set(a)
     for old in sorted(JOBS.values(), key=lambda j: j.started)[:-20]:
         JOBS.pop(old.id, None)
     CURRENT["job"] = job
@@ -912,6 +1040,101 @@ async def api_snapshots(request):
     return web.json_response({"snapshots": out, "vm_count": len(vms)})
 
 
+# --- power: idle shutdown ------------------------------------------------------------------
+#
+# Nothing has to run all the time. After IDLE minutes with no one using the console
+# (no clicks or keys in it, no typing in a terminal, no job running, no mock exam on
+# the clock), the cluster VMs and then this jump host shut down. The gate on Proxmox
+# starts them again. The browser warns five minutes ahead and "Stay on" resets it.
+
+POWER_FILE = WEB_STATE / "power.json"
+IDLE_DEFAULT = int(os.environ.get("IDLE_MINUTES", "30"))
+IDLE: dict = {"last": time.time(), "shutting_down": False}
+PASSIVE = ("/api/state", "/api/cluster", "/api/jobs", "/api/health", "/api/snapshots")
+
+
+def touch():
+    IDLE["last"] = time.time()
+
+
+def power_settings() -> dict:
+    p = read_json(POWER_FILE) or {}
+    return {"idle_minutes": int(p.get("idle_minutes", IDLE_DEFAULT)), "awake_until": int(p.get("awake_until", 0))}
+
+
+def exam_running() -> bool:
+    now = time.time()
+    for d in exam_dirs():
+        st = exam_state(d.name)
+        if st["deadline"] and not st["submitted_at"] and st["deadline"] > now:
+            return True
+    return False
+
+
+def idle_left():
+    """Seconds until the idle shutdown, or None while something keeps HelmYard on."""
+    ps = power_settings()
+    if ps["idle_minutes"] <= 0 or CURRENT["job"] is not None or ps["awake_until"] > time.time() or exam_running():
+        return None
+    return max(0, int(IDLE["last"] + ps["idle_minutes"] * 60 - time.time()))
+
+
+async def idle_reaper(app):
+    async def loop():
+        while True:
+            await asyncio.sleep(30)
+            try:
+                left = idle_left()
+                if left == 0 and not IDLE["shutting_down"] and env_file(PVE_ENV).get("PVE_TOKEN"):
+                    IDLE["shutting_down"] = True
+                    argv, stdin, label = job_argv("power", "shutdown", "")
+                    job = Job(secrets.token_hex(6), "power", "shutdown", argv, f"{label} (idle {power_settings()['idle_minutes']} min)")
+                    JOBS[job.id] = job
+                    CURRENT["job"] = job
+                    asyncio.create_task(run_job(job, stdin))
+            except Exception:  # pragma: no cover
+                pass
+    app["reaper"] = asyncio.create_task(loop())
+
+
+async def api_power(request):
+    if request.method == "PUT":
+        body = await request.json()
+        ps = power_settings()
+        if "idle_minutes" in body:
+            ps["idle_minutes"] = max(0, min(24 * 60, int(body["idle_minutes"])))
+        if "awake_hours" in body:   # keep HelmYard on for a while (0 clears it)
+            h = max(0, min(24, float(body["awake_hours"])))
+            ps["awake_until"] = int(time.time() + h * 3600) if h else 0
+        WEB_STATE.mkdir(parents=True, exist_ok=True)
+        POWER_FILE.write_text(json.dumps(ps))
+        touch()
+    return web.json_response(power_settings() | {"idle_left": idle_left(), "can_power": bool(env_file(PVE_ENV).get("PVE_TOKEN"))})
+
+
+async def api_ping(request):
+    touch()
+    IDLE["shutting_down"] = False
+    return web.json_response({"idle_left": idle_left()})
+
+
+async def api_state(request):
+    """Everything the page header needs, cheap enough to poll every few seconds."""
+    cur = CURRENT["job"]
+    c = CLUSTER_CACHE.get("data") or {}
+    vms = [v for v in c.get("vms", []) if v.get("role") == "node"]
+    return web.json_response({
+        "now": int(time.time()),
+        "job": cur.info() if cur else None,
+        "activity": activity_get(),
+        "power": power_settings() | {"idle_left": idle_left(), "shutting_down": IDLE["shutting_down"],
+                                     "gate_url": os.environ.get("GATE_URL") or None,
+                                     "nodes_running": sum(1 for v in vms if v.get("status") == "running"),
+                                     "nodes": len(vms), "known": bool(c.get("pve"))},
+        "exam_running": exam_running(),
+    })
+
+
 # --- terminals ---------------------------------------------------------------------------
 
 class Terminal:
@@ -1058,10 +1281,12 @@ async def term_ws(request):
                     continue
                 if m.get("t") == "i":
                     t.write(str(m.get("d", "")).encode())
+                    touch()
                 elif m.get("t") == "r":
                     t.resize(max(10, min(500, int(m.get("c", 80)))), max(4, min(300, int(m.get("r", 24)))))
             elif msg.type == WSMsgType.BINARY:
                 t.write(msg.data)
+                touch()
     finally:
         t.clients.discard(ws)
     return ws
@@ -1097,6 +1322,10 @@ def make_app() -> web.Application:
     r.add_post("/api/quiz/sittings/{sid}/submit", api_quiz_submit)
     r.add_get("/api/drills", api_drills)
     r.add_get("/api/drills/{id}", api_drill)
+    r.add_get("/api/state", api_state)
+    r.add_get("/api/power", api_power)
+    r.add_put("/api/power", api_power)
+    r.add_post("/api/ping", api_ping)
     r.add_get("/api/jobs", api_jobs)
     r.add_post("/api/jobs", api_start_job)
     r.add_get("/api/jobs/{jid}/stream", api_job_stream)
@@ -1108,6 +1337,7 @@ def make_app() -> web.Application:
     r.add_delete("/api/terms/{sid}", api_close_term)
     r.add_get("/api/terms/{sid}/ws", term_ws)
     r.add_static("/static/", STATIC, append_version=False)
+    app.on_startup.append(idle_reaper)
     return app
 
 
@@ -1115,6 +1345,11 @@ def main():
     if not os.environ.get("WEB_PASSWORD_HASH"):
         raise SystemExit("WEB_PASSWORD_HASH is not set (see /etc/cka-lab/web.env)")
     WEB_STATE.mkdir(parents=True, exist_ok=True)
+    load_jobs()
+    a = activity_get()
+    if a and a.get("phase") == "preparing":   # its job died with the previous run of the console
+        a.update(phase="interrupted", error="The console restarted while this was being set up. Start it again.")
+        activity_set(a)
     ctx = None
     if os.environ.get("WEB_CERT"):
         ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)

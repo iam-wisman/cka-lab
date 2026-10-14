@@ -27,6 +27,7 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
   lab exam <n> start            begin mock exam <n>: sets up all tasks, 120 min timer
   lab exam <n> prep             build the labs the exam assumes, if missing (as lab up does)
   lab exam <n> up               prep, then start
+  lab exam <n> begin [--snapshot]  prep, snapshot the cluster as before-exam<n>, then start
   lab exam <n> show [task]      print the exam paper, or one task
   lab exam <n> check            grade the exam (weighted, pass mark ${EXAM_PASS}%)
   lab exam <n> status           time remaining
@@ -36,6 +37,15 @@ ${c_bold}lab${c_off} - CKA practice lab (Kubernetes v1.35 curriculum)
   lab drill <id>|random [dom]   start one (the clock runs until lab drill check passes)
   lab drill check <id>          grade it and record the time
   lab drill cleanup <id>        remove what it created
+
+  lab playground [core|full]    a working cluster to experiment on, built with the reference solutions:
+                                core = HA control plane + 2 workers on v1.35 (labs 01-07);
+                                full = core + metrics-server, cert-manager, MetalLB, Traefik,
+                                Envoy Gateway and NFS storage
+
+  lab power [status]            power state of the lab VMs
+  lab power on|off              start or shut down the cluster VMs (lab commands start them by themselves)
+  lab power shutdown            shut down the cluster VMs, then this jump host
 
   lab snapshots                 list cluster snapshots
   lab snapshots delete <name>   delete a snapshot ("base" is protected)
@@ -315,6 +325,14 @@ cmd_exam() {
   case $action in
     prep) provision $(meta "$d" NEEDS) ;;
     up) provision $(meta "$d" NEEDS) && cmd_exam "$n" start ;;
+    begin)   # everything the web console's Start does, in one go: prep, snapshot, start
+      provision $(meta "$d" NEEDS) || exit 1
+      if [[ ${3:-} == --snapshot ]]; then
+        cmd_snapshot "before-exam$n"
+        info "Waiting for the cluster to come back after the snapshot"
+        wait_cluster || die "the cluster didn't come back Ready after the snapshot"
+      fi
+      cmd_exam "$n" start ;;
     start)
       [[ -f $st/deadline ]] && (( $(date +%s) < $(<"$st/deadline") )) && die "exam $n is already running (lab exam $n status)"
       mkdir -p "$st"; rm -f "$st"/*
@@ -591,6 +609,95 @@ wait_cluster() {
   return 1
 }
 
+# --- power: the cluster VMs run only while they're needed ---------------------------
+#
+# HelmYard can be switched off completely (the gate on Proxmox starts the jump host
+# again). The node VMs are started by any lab command that needs the cluster, and
+# shut down by `lab power off` or when the web console has been idle for a while.
+
+# nodes_state: "<name> <status>" for every node VM, from one Proxmox call.
+nodes_state() {
+  local all; all=$(pve GET "" | jq -c '[.data[] | {vmid, status}]') || return 1
+  lab_vmids node | while IFS=: read -r vmid name; do
+    printf '%s %s\n' "$name" "$(jq -r --argjson id "$vmid" '.[] | select(.vmid == $id) | .status' <<<"$all")"
+  done
+}
+
+# wait_nodes: every node answers SSH, then, once there is a cluster, it's Ready.
+wait_nodes() {
+  local n
+  for n in "${K8S_NODES[@]}" nfs; do wait_for 300 node_up "$n" || die "$n didn't come up after starting"; done
+  if [[ -f $HOME/.kube/config ]]; then
+    info "Waiting for Kubernetes"
+    wait_cluster || die "the nodes are up but the cluster isn't Ready; check lab power status and kubectl get nodes"
+  fi
+}
+
+power_on() {
+  local name st vmid started=0
+  while read -r name st; do
+    [[ $st == running ]] && continue
+    vmid=$(lab_vmids node | awk -F: -v n="$name" '$2 == n {print $1}')
+    pve POST "/$vmid/status/start" >/dev/null && started=1 && info "$name: starting"
+  done < <(nodes_state)
+  (( started )) || { info "The cluster VMs are already running"; return 0; }
+  wait_nodes && info "Cluster VMs up"
+}
+
+power_off() {
+  local name st vmid upid upids=()
+  while read -r name st; do
+    [[ $st == running ]] || continue
+    vmid=$(lab_vmids node | awk -F: -v n="$name" '$2 == n {print $1}')
+    upid=$(pve POST "/$vmid/status/shutdown" -d timeout=180 -d forceStop=1 | jq -r .data) && upids+=("$upid") && info "$name: shutting down"
+  done < <(nodes_state)
+  for upid in "${upids[@]}"; do wait_task "$upid"; done
+  rm -f "$GRADER_KUBECONFIG"
+  info "Cluster VMs off"
+}
+
+# ensure_nodes: start the cluster VMs if any is off (no-op without Proxmox access).
+ensure_nodes() {
+  [[ -r $PVE_ENV && -r $LAB_ENV ]] || return 0
+  local states; states=$(nodes_state 2>/dev/null) || return 0
+  awk '$2 != "running"' <<<"$states" | grep -q . || return 0
+  info "The cluster VMs are off; starting them first"
+  power_on
+}
+
+cmd_power() {
+  case ${1:-status} in
+    status)
+      [[ -r $PVE_ENV ]] || die "power control needs $PVE_ENV (installed by infra/install-lab.sh)"
+      printf '%-8s %s\n' jump running
+      nodes_state ;;
+    on) power_on ;;
+    off) power_off ;;
+    shutdown)
+      power_off
+      info "Shutting down the jump host. Start HelmYard again from the gate page."
+      sudo systemctl poweroff --no-block ;;
+    *) usage; exit 2 ;;
+  esac
+}
+
+# --- playground: a working cluster to experiment on -----------------------------------
+
+PLAYGROUND_CORE="07"                        # 01-07: HA control plane, 2 workers, Calico, v1.35
+PLAYGROUND_FULL="07 09 10 20 22 23 25"      # + metrics-server, cert-manager, MetalLB, Traefik, Envoy Gateway, NFS
+
+cmd_playground() {
+  local preset=${1:-core} want
+  case $preset in
+    core) want=$PLAYGROUND_CORE ;;
+    full) want=$PLAYGROUND_FULL ;;
+    *) die "usage: lab playground [core|full]" ;;
+  esac
+  provision $want
+  mkdir -p "$LAB_STATE" && echo "$preset" >"$LAB_STATE/playground"
+  info "Playground ready ($preset). The cluster is yours: kubectl get nodes -o wide"
+}
+
 cmd_snapshots() {
   local vm vmid name
   for vm in $(lab_vmids node); do
@@ -677,6 +784,13 @@ cmd_reset() {
   pve POST "/$vmid/snapshot/$snap/rollback" -d start=1 >/dev/null
 }
 
+# Commands that work on the cluster start its VMs first if they are off.
+case ${1:-}:${2:-} in
+  start:*|up:*|check:*|grade:*|cleanup:*|clean:*|playground:*|snapshot:*) ensure_nodes ;;
+  exam:*) [[ ${3:-} =~ ^(start|prep|up|begin|check|cleanup)$ ]] && ensure_nodes ;;
+  drill:*|drills:*) [[ ${2:-list} =~ ^(list|ls)$ ]] || ensure_nodes ;;
+esac
+
 case ${1:-} in
   list|ls) cmd_list ;;
   show) cmd_show "${2:?lab id}" ;;
@@ -694,6 +808,8 @@ case ${1:-} in
       *) usage; exit 2 ;;
     esac ;;
   snapshot) cmd_snapshot "${2:-}" ;;
+  power) cmd_power "${2:-status}" ;;
+  playground) cmd_playground "${2:-core}" ;;
   # Save only the jump host's lab state under a snapshot name (used by the installer for
   # "base", and to bring snapshots taken before this existed up to date).
   jump-state) [[ ${2:-} =~ ^[A-Za-z][A-Za-z0-9_-]{1,39}$ ]] || die "usage: lab jump-state <name>"; jump_save "$2" && info "jump: lab state saved as $2" ;;

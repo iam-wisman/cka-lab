@@ -54,11 +54,11 @@ jssh 'sudo install -m 644 /dev/stdin /etc/bash_completion.d/lab' <<'EOF'
 _lab() {
   local cur=${COMP_WORDS[COMP_CWORD]} prev=${COMP_WORDS[1]:-}
   if (( COMP_CWORD == 1 )); then
-    COMPREPLY=($(compgen -W "list show start up check solution cleanup exam drill snapshots snapshot reset" -- "$cur"))
+    COMPREPLY=($(compgen -W "list show start up check solution cleanup exam drill playground power snapshots snapshot reset" -- "$cur"))
   elif (( COMP_CWORD == 2 )) && [[ $prev =~ ^(show|start|up|check|solution|cleanup)$ ]]; then
     COMPREPLY=($(compgen -W "$(ls /opt/cka-lab/labs)" -- "$cur"))
   elif (( COMP_CWORD == 3 )) && [[ $prev == exam ]]; then
-    COMPREPLY=($(compgen -W "start up prep show check status cleanup" -- "$cur"))
+    COMPREPLY=($(compgen -W "start up prep begin show check status cleanup" -- "$cur"))
   fi
 }
 complete -F _lab lab

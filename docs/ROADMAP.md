@@ -5,6 +5,11 @@ holds, **CKA, CKAD, CKS, KCNA and KCSA**, at a difficulty **above** the real
 exams. Every track follows its official CNCF curriculum (`lab/tracks.json`;
 `tools/check-versions.py` reports new curricula).
 
+The console takes them in this order: **CKA → CKS → CKAD → KCNA → KCSA**. The
+CKA builds the cluster everything else runs on; the CKS secures it (and needs a
+passed CKA); the CKAD ships applications on it; the two multiple-choice exams
+come last, when most of their content is revision.
+
 Rules for all content:
 
 - No hints. A task states the requirement and links the official docs, nothing

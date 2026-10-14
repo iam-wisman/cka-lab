@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0E1E38">
+<title>HelmYard · Gate</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  /* HelmYard brand kit: Night Navy, Deep Surface, Kube Blue, Playground Orange, Lively Teal, Slate. */
+  :root { --navy: #0E1E38; --surface: #162B4D; --blue: #326CE5; --orange: #FF8E3C; --teal: #1CD1A1; --slate: #8A99AD; --line: #24406B; --ink: #F4F7FC; --fail: #FF6B7A;
+    --ui: "Inter", "Aptos", system-ui, -apple-system, "Segoe UI", sans-serif; --mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: var(--navy) radial-gradient(rgba(138, 153, 173, .07) 1px, transparent 1.2px) 0 0 / 22px 22px; color: var(--ink); font: 400 15.5px/1.55 var(--ui); display: grid; place-items: center; min-height: 100vh; padding: 16px; }
+  main { width: 100%; max-width: 460px; text-align: center; }
+  .mascot { width: 200px; height: auto; filter: drop-shadow(0 18px 40px rgba(50, 108, 229, .35)); }
+  h1 { margin: 6px 0 0; font: 800 38px/1.1 var(--ui); letter-spacing: -.02em; }
+  h1 b { color: var(--orange); font-weight: 800; }
+  .tag { margin-top: 6px; font: 700 12px var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--slate); }
+  .card { margin-top: 26px; padding: 22px 22px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; text-align: left; box-shadow: 0 22px 48px -16px rgba(0, 0, 0, .65); }
+  .card h2 { margin: 0 0 4px; font: 700 19px var(--ui); }
+  .card p { margin: 0; color: #C5D1E2; font-size: 14px; }
+  .rows { display: grid; gap: 8px; margin: 16px 0 18px; }
+  .row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .row .grow { flex: 1; }
+  .row .v { font: 500 13px var(--mono); color: var(--slate); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1.5px var(--slate); flex: none; }
+  .dot.on { background: var(--teal); box-shadow: none; }
+  .dot.wait { background: var(--orange); box-shadow: none; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .5; } }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, .btn { height: 42px; padding: 0 18px; border-radius: 10px; border: 1px solid #36557F; background: transparent; color: var(--ink); font: 600 14.5px var(--ui); cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; }
+  button:hover, .btn:hover { border-color: var(--blue); background: rgba(50, 108, 229, .16); }
+  button[disabled] { opacity: .45; cursor: not-allowed; }
+  .cta { background: var(--orange); border-color: var(--orange); color: var(--navy); }
+  .cta:hover { background: #ffa05c; border-color: #ffa05c; }
+  .danger { color: var(--fail); border-color: rgba(255, 107, 122, .5); }
+  .danger:hover { background: rgba(255, 107, 122, .12); border-color: var(--fail); }
+  input { width: 100%; height: 44px; margin: 12px 0; padding: 0 12px; border-radius: 10px; border: 1px solid #36557F; background: #0B1830; color: var(--ink); font: 15px var(--ui); }
+  input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(50, 108, 229, .45); }
+  .err { color: var(--fail); font-size: 13.5px; min-height: 20px; margin-top: 8px; }
+  .note { margin-top: 16px; font-size: 13px; color: var(--slate); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <img class="mascot" src="/mascot.png" alt="">
+  <h1>Helm<b>Yard</b></h1>
+  <div class="tag">Kubernetes Playgrounds</div>
+
+  <form class="card" id="login">
+    <h2>Gate</h2>
+    <p>Sign in with the student password to start HelmYard.</p>
+    <input type="password" id="pw" autocomplete="current-password" aria-label="Password" required>
+    <button class="cta" type="submit">Sign in</button>
+    <div class="err" id="err"></div>
+  </form>
+
+  <section class="card hidden" id="panel">
+    <h2 id="title">Checking…</h2>
+    <p id="lead"></p>
+    <div class="rows" id="rows"></div>
+    <div class="btns" id="btns"></div>
+    <div class="err" id="err2"></div>
+  </section>
+  <p class="note">HelmYard shuts itself down after a while without use. This gate stays on, so you can always start it again.</p>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const post = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Gate": "1" }, body: JSON.stringify(body || {}) });
+let st = null, busy = false, opened = false;
+
+$("login").onsubmit = async e => {
+  e.preventDefault(); $("err").textContent = "";
+  const r = await post("/api/login", { password: $("pw").value });
+  if (r.ok) { show(); } else { $("err").textContent = (await r.json().catch(() => ({}))).error || "Login failed"; $("pw").select(); }
+};
+
+function el(tag, attrs, ...kids) { const e = document.createElement(tag); Object.assign(e, attrs || {}); e.append(...kids.filter(k => k != null)); return e; }
+
+function draw() {
+  const on = st.jump === "running", up = st.nodes.filter(s => s === "running").length;
+  const state = st.console ? "ready" : on ? "booting" : up ? "stopping" : "off";
+  $("title").textContent = { ready: "HelmYard is on", booting: "Starting…", stopping: "Shutting down…", off: "HelmYard is off" }[state];
+  $("lead").textContent = { ready: up ? "The console and the cluster are up." : "The console is up. The cluster VMs start when a lab needs them.",
+    booting: "The jump host is booting; the console answers in about a minute.", stopping: "The cluster VMs are going down; the jump host follows.",
+    off: "Everything is shut down. Start the jump host; the cluster VMs start when a lab, drill or the playground needs them." }[state];
+  if (st.error) $("lead").textContent = "Proxmox didn't answer: " + st.error;
+  $("rows").replaceChildren(
+    el("div", { className: "row" }, el("span", { className: "dot " + (st.console ? "on" : on ? "wait" : "") }), el("span", { textContent: "Jump host and console" }), el("span", { className: "grow" }), el("span", { className: "v", textContent: st.console ? "ready" : st.jump || "?" })),
+    el("div", { className: "row" }, el("span", { className: "dot " + (up === st.nodes.length ? "on" : up ? "wait" : "") }), el("span", { textContent: "Cluster VMs" }), el("span", { className: "grow" }), el("span", { className: "v", textContent: `${up}/${st.nodes.length} running` })));
+  const b = [];
+  if (st.console) b.push(el("a", { className: "btn cta", href: st.console_url, textContent: "Open HelmYard" }));
+  if (!on) {
+    b.push(el("button", { className: "cta", textContent: "Start HelmYard", disabled: busy, onclick: () => act("/api/start", {}) }));
+    b.push(el("button", { textContent: "Start with the cluster", disabled: busy, onclick: () => act("/api/start", { cluster: true }) }));
+  } else if (st.console && up < st.nodes.length) {
+    b.push(el("button", { textContent: "Start the cluster too", disabled: busy, onclick: () => act("/api/start", { cluster: true }) }));
+  }
+  if (on || up) b.push(el("button", { className: "danger", textContent: "Shut down", disabled: busy, onclick: () => { if (confirm("Shut down the cluster and the jump host? Open shells close; your work stays on disk.")) act("/api/stop"); } }));
+  $("btns").replaceChildren(...b);
+  // Started from here: go to the console as soon as it answers.
+  if (st.console && opened) location.href = st.console_url;
+}
+
+async function act(path, body) {
+  busy = true; $("err2").textContent = ""; draw();
+  const r = await post(path, body);
+  if (!r.ok) $("err2").textContent = (await r.json().catch(() => ({}))).error || "Failed";
+  if (path === "/api/start") opened = true;
+  busy = false; poll();
+}
+
+async function poll() {
+  const r = await fetch("/api/status", { cache: "no-store" });
+  if (r.status === 401) { $("login").classList.remove("hidden"); $("panel").classList.add("hidden"); return; }
+  st = await r.json();
+  $("login").classList.add("hidden"); $("panel").classList.remove("hidden");
+  draw();
+}
+function show() { poll(); setInterval(poll, 4000); }
+fetch("/api/status", { cache: "no-store" }).then(r => { if (r.ok) show(); else $("pw").focus(); });
+</script>
+</body>
+</html>

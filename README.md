@@ -33,11 +33,14 @@ labs are challenges, like the exam. See
 ## Kubestronaut
 
 The platform is growing from CKA practice into preparation for all five
-certifications a **Kubestronaut** holds: CKA, CKAD, CKS, KCNA and KCSA. The web
-console's **Kubestronaut** tab shows every track with its official domains and
-weights (`lab/tracks.json`). KCNA and KCSA already run on a quiz engine with
-domain practice and timed mock exams; CKAD and CKS are mapped to their
-curricula, and their labs are next. See [docs/ROADMAP.md](docs/ROADMAP.md).
+certifications a **Kubestronaut** holds. The web console opens on a **roadmap**
+that takes them in this order: **CKA → CKS → CKAD → KCNA → KCSA**. Build and
+repair a cluster first, then secure it (CKS needs a passed CKA), then ship
+applications on it, and finish with the two multiple-choice exams. Each step
+shows its official domains and weights (`lab/tracks.json`) and your progress.
+KCNA and KCSA already run on a quiz engine with domain practice and timed mock
+exams; CKAD and CKS are mapped to their curricula, and their labs are next. See
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -150,12 +153,15 @@ can be mixed freely.
 
 | | |
 |---|---|
-| **Dashboard** | a live `lab status` terminal card for the 7 VMs; exam readiness as a ring and a bar per domain (weighted like the exam); an "up next" card; labs passed (one square per lab, coloured by domain), checks passing, best mock exam, a 14-day activity chart; and the labs as a searchable, filterable card catalogue |
+| **Roadmap** (home) | the five certifications in order, with where you are; what you're working on (and how far its setup is), the cluster's power state, and the idle-shutdown countdown |
+| **Working on** | starting a lab, drill, mock exam or playground records it on the server: **Preparing** while its setup runs (with the line it's on), then **In progress**, or **Setup failed**/**Interrupted**. A chip in the top bar, the catalogue cards and the workspace all show it, in every tab and after a reload, so leaving the page never loses track. Job output is kept on disk, and every multi-step start (prerequisites, snapshot, setup) is one server-side job |
+| **Playground** | a working cluster to try commands on, with no tasks and no grading: **Core** (HA control plane and two workers on v1.35) or **Full stack** (plus metrics-server, cert-manager, MetalLB, Traefik, Envoy Gateway and NFS storage), built by the reference solutions, beside a terminal |
+| **CKA dashboard** | a live `lab status` terminal card for the 7 VMs; exam readiness as a ring and a bar per domain (weighted like the exam); an "up next" card; labs passed (one square per lab, coloured by domain), checks passing, best mock exam, a 14-day activity chart; and the labs as a searchable, filterable card catalogue |
 | **Lab workspace** | the task (with its documentation links) beside a terminal; **Start** (or **Spin up**, when earlier labs it builds on aren't done), **Check**, **Clean up** stream their output live; a **Results** tab lists every check, grouped, with expected-vs-found; per-lab notes saved on the jump host; solutions behind a "try first" prompt |
 | **Terminals** | real login shells (xterm.js over a WebSocket to a PTY). Sessions live on the server, so a reload or a closed tab reattaches to the same shell; several tabs, renamed by double-clicking (names are kept on the server); JetBrains Mono Nerd Font, so prompt and `ls` icons render; code blocks in the task have a **paste** button that types into the shell without pressing Enter |
 | **Speed drills** | a catalogue with best times, a drill workspace with the clock against the budget, Start (new values), Check, Clean up, and a bar per past run |
 | **Mock exams** | briefing, optional snapshot before setup, 120-minute countdown, the task's kubeconfig context to paste, question navigator with weights and flags, a notepad, auto-grade when time runs out, weighted results per task with **time spent against each task's share of the clock**, and a review mode showing which checks failed |
-| **Cluster** | power state of the 7 VMs (Proxmox API) and node status (Kubernetes), snapshots: take, delete, reset (typed confirmation; the page stays connected, except for older snapshots that roll back the jump VM, where it waits and reconnects) |
+| **Cluster** | **power**: start or shut down the cluster VMs, shut everything down, set the idle shutdown (15 min to 4 h, or never) or keep it on for 3 hours; power state of the 7 VMs (Proxmox API) and node status (Kubernetes), snapshots: take, delete, reset (typed confirmation; the page stays connected, except for older snapshots that roll back the jump VM, where it waits and reconnects) |
 
 <table><tr>
 <td><img src="docs/web/overview.png" alt="Dashboard: the Kubernetes Playgrounds hero with a live lab status terminal card"></td>
@@ -200,24 +206,21 @@ How it's built:
 - **Front end:** plain JavaScript with no build step. xterm.js, marked and
   DOMPurify are vendored at pinned versions, so the console works without
   internet access.
-- **Brand:** HelmYard, *Kubernetes Playgrounds*. The official kit is in
+- **Brand and design:** HelmYard, *Kubernetes Playgrounds*. The official kit is in
   [`docs/brand/kit/`](docs/brand/kit/01_Brand_Guidelines/BRAND_GUIDELINES.md)
   (generated by its `setup_brandkit.py`): palette (Night Navy `#0E1E38`, Deep
   Surface `#162B4D`, Kube Blue `#326CE5`, Playground Orange `#FF8E3C`, Lively
   Teal `#1CD1A1`, Slate `#8A99AD`), wordmark lockups, favicon, and CSS, Tailwind
   and W3C design tokens. `docs/brand/build.py` draws the helm-and-server mark as
-  SVG (colour and reversed) and the README banner. The console uses Night Navy
-  for the shell and terminals, orange for the "Yard" accent, and teal for
-  healthy states.
-- **Design:** styled after [kubernetes.io](https://kubernetes.io/): its palette
-  (the blue `#326CE5` nav bar and hero band, dark blue `#234CA0`, coral
-  `#ED6A5A`, slate `#403F4C`, mint `#C0E0DE`, Bootstrap greys), its typeface
-  Open Sans, sentence-case buttons and plain, factual copy. White cards with a
-  header strip and a status footer; light only. The readiness ring has one
-  arc per exam domain, sized by its weight and filled as its labs are passed. Anything you could type, the
-  terminal included, is JetBrains Mono Nerd Font (the Mono variant, so icons
-  keep to one cell). Both fonts are OFL and served locally; their licenses sit
-  next to the files in `lab/web/static/fonts/`.
+  SVG (colour and reversed) and the README banner. The console follows the
+  kit: dark first, Night Navy canvas with a faint dot grid, Deep Surface cards,
+  Kube Blue buttons, Playground Orange for the main calls to action and for
+  anything being prepared, Lively Teal for healthy and passed. Small blue text
+  never sits on navy (the kit's 3.5:1 contrast rule), so links use a lighter
+  tint. The roadmap hero shows the kit's mascot. Interface text is Inter;
+  anything you could type, the terminal included, is JetBrains Mono Nerd Font
+  (the Mono variant, so icons keep to one cell). Both fonts are OFL and served
+  locally; their licenses sit next to the files in `lab/web/static/fonts/`.
 - **Screenshots:** made by `tools/web-screenshots.mjs`, which drives headless
   Chrome over the DevTools protocol with no npm packages.
 
@@ -271,6 +274,33 @@ lab list
 # or open https://<jump-ip>/ and log in with the student password
 ```
 
+## On demand: nothing has to run all the time
+
+HelmYard switches itself off and comes back when you want it:
+
+- **The cluster VMs** start when a command needs them. Every `lab` command that
+  works on the cluster (start, up, check, cleanup, drills, exams, playground,
+  snapshot) first starts any node VM that is off and waits until the nodes are
+  Ready. `lab power on|off|status` does it by hand.
+- **Idle shutdown:** after 30 minutes without use (no clicks or keys in the
+  console, no typing in a terminal, no job running, no mock exam on the clock)
+  the console shuts the cluster VMs down, then the jump host. It warns five
+  minutes ahead with a **Stay on** button. The Cluster page sets the delay or
+  turns it off.
+- **The gate** (`infra/gate/`) is the one thing that stays on: an Alpine LXC
+  on Proxmox with 128 MB of RAM, serving a HelmYard start page with the Python
+  standard library alone. Sign in with the student password and press **Start**:
+  it boots the jump host and takes you to the console when it answers. It can
+  also start the cluster with it, or shut everything down. It has its own
+  Proxmox API token that, like the jump host's, can only see and power the lab
+  VMs, and a certificate from the console CA.
+
+```bash
+PVE=root@<proxmox> infra/gate/install-gate.sh     # creates CT 207 "helmyard-gate" and links the console to it
+```
+
+When the console is off, an open browser tab says so and links to the gate.
+
 ## Spinning a lab up on demand
 
 Every lab can be started on its own, even on a bare cluster. `lab up <id>`
@@ -279,8 +309,10 @@ their own needs), skips any that are done, and builds the rest with the
 reference solutions before running the lab's setup:
 
 ```bash
-lab up 22        # needs 10 and 20, which need 05 ... 01: builds what's missing, then starts 22
-lab exam 1 up    # the same for a mock exam (it assumes 07, 09, 23 and 25)
+lab up 22               # needs 10 and 20, which need 05 ... 01: builds what's missing, then starts 22
+lab exam 1 up           # the same for a mock exam (it assumes 07, 09, 23 and 25)
+lab exam 1 begin --snapshot   # prerequisites, a before-exam1 snapshot, then the exam: what the console's Start runs
+lab playground full     # a working cluster with the usual add-ons, nothing to grade
 ```
 
 A prerequisite counts as done when it passed `lab check`, was built by an
@@ -340,6 +372,7 @@ infra/
   deploy.sh               render, upload, build
   proxmox/build.sh        runs on the Proxmox host
   install-lab.sh          framework, web console, scoped API token on the jump host
+  gate/                   the always-on start page (gate.py, index.html) and install-gate.sh
 lab/
   bin/lab                 the CLI
   web/server.py           the web console (aiohttp): API, jobs, terminals

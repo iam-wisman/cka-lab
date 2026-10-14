@@ -1,7 +1,9 @@
-/* HelmYard (Kubernetes Playgrounds) (the CKA lab web console): front end. Plain JS, no build step.
-   Views: overview (#/), lab workspace (#/lab/<id>), mock exam (#/exam/<n>),
-   cluster and snapshots (#/cluster). The terminal pane is created once and
-   moved between workspaces so shells survive navigation. */
+/* HelmYard (Kubernetes Playgrounds): front end. Plain JS, no build step.
+   Views: the Kubestronaut roadmap (#/), the CKA track (#/cka), lab workspace (#/lab/<id>),
+   drills, mock exams (#/exam/<n>), the playground (#/playground), cluster and power
+   (#/cluster). The terminal pane is created once and moved between workspaces so shells
+   survive navigation. What you're working on, the running job and the power state come
+   from the server (/api/state), so they are right in every tab and after a reload. */
 "use strict";
 
 // --- helpers --------------------------------------------------------------------------
@@ -140,6 +142,17 @@ function confirmSpinUp(what, missing) {
       p("From a bare cluster this can take half an hour or more. The output panel shows progress.")] });
 }
 
+// Starting something else while you're on a lab, drill, exam or the playground: say so first.
+async function confirmSwitch(kind, id, what) {
+  const other = act();
+  if (!other || (other.kind === kind && (other.id === id || other.num === id)) || ["failed", "interrupted"].includes(other.phase)) return true;
+  return dialog({
+    title: `Switch to ${what}?`, confirm: "Switch",
+    body: [p(`You're working on ${actName(other)} (${PHASE[other.phase].toLowerCase()}). The cluster is shared, so ${what} becomes what you're working on.`),
+      p("Nothing is removed: what the other one set up stays on the cluster, and you can go back to it.")],
+  });
+}
+
 // --- markdown ------------------------------------------------------------------------------
 
 function renderMarkdown(md) {
@@ -244,6 +257,7 @@ const Jobs = {
       const info = await api("/jobs", { method: "POST", body: { action, target, arg } });
       S.jobs.current = info;
       this.follow(info);
+      State.kick();
       return info;
     } catch (e) { toast(e.message, true); return null; }
   },
@@ -262,6 +276,7 @@ const Jobs = {
       if (S.jobs.current && S.jobs.current.id === info.id) S.jobs.current = null;
       S.jobs.recent.unshift(st.info);
       this.emit({ type: "end", info: st.info });
+      State.kick();
     });
     es.onerror = () => {
       // The server went away mid-job (e.g. a reset rolled back the jump host).
@@ -282,6 +297,104 @@ const Jobs = {
       if (S.jobs.current) this.follow(S.jobs.current);
       renderJobPill();
     } catch { /* not logged in yet */ }
+  },
+};
+
+// --- live state: the running job, what you're working on, power ------------------------------------
+
+const PHASE = { preparing: "Preparing", prepared: "Prerequisites built", ready: "In progress", failed: "Setup failed", interrupted: "Interrupted" };
+const act = () => S.state?.activity || null;
+const actFor = (kind, id) => { const a = act(); return a && a.kind === kind && (a.id === id || a.num === id) ? a : null; };
+const actHref = a => ({ lab: `#/lab/${a.id}`, drill: `#/drill/${a.id}`, exam: `#/exam/${a.id}`, playground: "#/playground" })[a.kind] || "#/";
+const actName = a => ({ lab: `Lab ${a.num}`, drill: `Drill ${a.num}`, exam: `Mock exam ${a.id}`, playground: `Playground · ${a.id}` })[a.kind] || a.title;
+const serverNow = () => (Date.now() + (S.skew || 0)) / 1000;
+
+const State = {
+  listeners: new Set(),
+  fails: 0,
+  on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
+  async poll() {
+    let st;
+    try { st = await api("/state"); }
+    catch (e) {
+      if (e.status === 0 && ++this.fails >= 2) Offline.show();
+      return;
+    }
+    this.fails = 0;
+    Offline.hide();
+    const prev = S.state;
+    S.state = st;
+    S.skew = st.now * 1000 - Date.now();
+    if (st.power?.gate_url) store.set("gateUrl", st.power.gate_url);
+    if (st.job && !Jobs.streams.has(st.job.id)) { S.jobs.current = st.job; Jobs.follow(st.job); }
+    if (st.job && S.jobs.current && S.jobs.current.id === st.job.id) S.jobs.current.progress = st.job.progress;
+    renderNow(); renderIdle(); renderJobPill(); renderHealth();
+    for (const fn of [...this.listeners]) { try { fn(st, prev); } catch { /* a view's problem */ } }
+  },
+  start() {
+    if (this.timer) return;
+    const loop = async () => { await this.poll(); this.timer = setTimeout(loop, S.state?.job ? 2000 : 5000); };
+    loop();
+  },
+  async kick() { clearTimeout(this.timer); this.timer = null; this.start(); },
+};
+
+// The "now" chip in the top bar: what you're working on, from any page.
+function renderNow() {
+  const slot = $("#now-slot");
+  if (!slot) return;
+  const a = act();
+  if (!a) { slot.replaceChildren(); return; }
+  const prep = a.phase === "preparing";
+  const cls = { preparing: "run", ready: "ok", prepared: "ok", failed: "bad", interrupted: "bad" }[a.phase] || "";
+  const since = prep ? clock(serverNow() - a.since) : "";
+  slot.replaceChildren(h("a", { class: `now-chip ${cls}`, href: actHref(a), title: prep && S.state?.job ? S.state.job.progress : PHASE[a.phase] },
+    h("span", { class: "dot " + (cls === "run" ? "run" : cls) }),
+    h("span", { class: "what" }, actName(a)),
+    h("span", { class: "phase" }, PHASE[a.phase] || a.phase, since ? ` · ${since}` : "")));
+}
+
+// Idle shutdown: a warning five minutes ahead, and "Stay on".
+function renderIdle() {
+  const pw = S.state?.power;
+  let el = $(".idle-banner");
+  const left = pw?.idle_left;
+  const show = pw && (pw.shutting_down || (left != null && left <= 300));
+  if (!show) { el && el.remove(); return; }
+  if (!el) { el = h("div", { class: "idle-banner", role: "alert" }); document.body.append(el); }
+  el.replaceChildren(...(pw.shutting_down
+    ? [h("span", {}, h("b", {}, "HelmYard is shutting down"), " after being idle. Start it again from the gate page.")]
+    : [h("span", {}, h("b", {}, `Shutting down in ${clock(left)}`), " · nothing has happened for a while"),
+      h("button", { class: "btn sm cta", onclick: () => { lastPing = 0; ping(true); } }, "Stay on")]));
+}
+
+let lastPing = 0;
+function ping(force = false) {
+  if (!force && Date.now() - lastPing < 60000) return;
+  lastPing = Date.now();
+  api("/ping", { method: "POST" }).then(() => State.kick()).catch(() => {});
+}
+for (const ev of ["keydown", "pointerdown", "wheel"]) addEventListener(ev, () => S.state && ping(), { passive: true, capture: true });
+
+// When the jump host doesn't answer: it's off (idle shutdown) or rebooting.
+const Offline = {
+  el: null,
+  show() {
+    if (this.el || $(".offline")) return;
+    const gate = store.get("gateUrl", null);
+    this.el = h("div", { class: "offline" }, h("div", {},
+      h("img", { src: "/static/brand/helmyard-mascot.png", alt: "", class: "offline-mascot", onerror: e => e.target.remove() }),
+      h("h2", {}, "HelmYard is off"),
+      h("p", {}, "The jump host isn't answering. It shuts down by itself after a while without use, together with the cluster."),
+      gate ? h("p", {}, h("a", { class: "btn cta lg", href: gate }, "Open the gate to start it")) : h("p", { class: "muted" }, "Start it from the gate page on Proxmox."),
+      h("p", { class: "muted small" }, "This page reconnects by itself when it's back."),
+      h("div", { class: "bar" })));
+    document.body.append(this.el);
+  },
+  hide() {
+    if (!this.el) return;
+    this.el.remove(); this.el = null;
+    route();
   },
 };
 
@@ -332,7 +445,7 @@ function renderJobPill() {
   const slot = $("#job-slot");
   if (!slot) return;
   const cur = S.jobs.current;
-  slot.replaceChildren(cur ? h("span", { class: "pill job", title: "Show output", onclick: () => showJobDialog(cur) },
+  slot.replaceChildren(cur && !cur.subject ? h("span", { class: "pill job", title: cur.progress || "Show output", onclick: () => showJobDialog(cur) },
     h("span", { class: "bar" }), h("span", { class: "label" }, cur.label)) : "");
 }
 
@@ -613,19 +726,21 @@ function activityBars(days) {
 
 function renderTop() {
   const top = h("header", { class: "top" },
-    h("a", { class: "brand", href: "#/", title: "HelmYard: overview" }, h("img", { class: "brand-mark", src: "/static/brand/helmyard-mark.svg", alt: "" }),
+    h("a", { class: "brand", href: "#/", title: "HelmYard: your roadmap" }, h("img", { class: "brand-mark", src: "/static/favicon.svg", alt: "" }),
       h("span", { class: "brand-text" }, h("span", { class: "brand-name" }, "Helm", h("b", {}, "Yard")), h("small", {}, "Kubernetes Playgrounds"))),
     h("nav", { class: "nav" },
-      h("a", { href: "#/kubestronaut", "data-r": "kubestronaut" }, "Kubestronaut"),
-      h("a", { href: "#/", "data-r": "labs" }, "Labs"),
+      h("a", { href: "#/", "data-r": "roadmap" }, "Roadmap"),
+      h("a", { href: "#/cka", "data-r": "cka" }, "CKA labs"),
       h("a", { href: "#/drills", "data-r": "drills" }, "Drills"),
       h("a", { href: "#/exams", "data-r": "exams" }, "Exams"),
+      h("a", { href: "#/playground", "data-r": "playground" }, "Playground"),
       h("a", { href: "#/cluster", "data-r": "cluster" }, "Cluster")),
     h("span", { class: "spacer" }),
     h("div", { class: "tools" },
+      h("span", { id: "now-slot" }),
       h("span", { id: "job-slot" }),
       h("a", { class: "pill", id: "health", href: "#/cluster", title: "Kubernetes nodes Ready" }, h("span", { class: "dot" }), h("span", { class: "label" }, "cluster")),
-      h("button", { class: "btn quiet sm", onclick: logout }, "Log out")));
+      h("button", { class: "btn quiet sm", onclick: logout }, h("span", { class: "label" }, "Log out"))));
   return top;
 }
 
@@ -636,9 +751,10 @@ function markNav(route) {
 function renderHealth() {
   const el = $("#health");
   if (!el) return;
-  const c = S.cluster;
+  const c = S.cluster, pw = S.state?.power;
   let cls = "", text = "checking";
-  if (c) {
+  if (pw?.known && pw.nodes && pw.nodes_running === 0) { cls = "off"; text = "cluster off"; }
+  else if (c) {
     if (c.nodes && c.nodes.length) {
       const ready = c.nodes.filter(n => n.ready).length;
       cls = ready === c.nodes.length ? "ok" : "bad";
@@ -696,6 +812,7 @@ async function logout() {
 
 function showLogin() {
   if ($(".login")) return;
+  $(".idle-banner")?.remove();
   cleanupView();
   const pw = h("input", { class: "field", type: "password", id: "pw", autocomplete: "current-password", required: true });
   const err = h("div", { class: "err" });
@@ -736,15 +853,17 @@ async function route() {
   const main = $("#main");
   if (!main) return;
   try {
-    if (!parts.length || parts[0] === "labs") { markNav("labs"); await viewOverview(main); }
+    if (!parts.length || parts[0] === "kubestronaut") { markNav("roadmap"); await viewRoadmap(main); }
+    else if (parts[0] === "cka" || parts[0] === "labs") { markNav("cka"); await viewOverview(main); }
     else if (parts[0] === "exams") { markNav("exams"); await viewOverview(main, "exams"); }
-    else if (parts[0] === "lab") { markNav("labs"); await viewLab(main, parts[1], parts[2]); }
+    else if (parts[0] === "lab") { markNav("cka"); await viewLab(main, parts[1], parts[2]); }
     else if (parts[0] === "exam") { markNav("exams"); await viewExam(main, parts[1], parts[2]); }
     else if (parts[0] === "cluster") { markNav("cluster"); await viewCluster(main); }
-    else if (parts[0] === "kubestronaut") { markNav("kubestronaut"); await viewKubestronaut(main); }
-    else if (parts[0] === "track") { markNav("kubestronaut"); await viewTrack(main, parts[1]); }
-    else if (parts[0] === "quiz" && parts[1] === "s") { markNav("kubestronaut"); await viewSitting(main, parts[2], parts[3]); }
-    else if (parts[0] === "quiz") { markNav("kubestronaut"); await viewQuizTrack(main, parts[1]); }
+    else if (parts[0] === "playground") { markNav("playground"); await viewPlayground(main); }
+    else if (parts[0] === "track" && parts[1] === "cka") { location.hash = "#/cka"; }
+    else if (parts[0] === "track") { markNav("roadmap"); await viewTrack(main, parts[1]); }
+    else if (parts[0] === "quiz" && parts[1] === "s") { markNav("roadmap"); await viewSitting(main, parts[2], parts[3]); }
+    else if (parts[0] === "quiz") { markNav("roadmap"); await viewQuizTrack(main, parts[1]); }
     else if (parts[0] === "drills") { markNav("drills"); await viewDrills(main); }
     else if (parts[0] === "drill") { markNav("drills"); await viewDrill(main, parts[1]); }
     else location.hash = "#/";
@@ -761,10 +880,12 @@ async function route() {
 function labCard(l, next) {
   const i = DOMAINS.indexOf(domainOf(l.domain));
   const r = l.result;
-  const state = labPassed(l) ? "passed" : r ? "graded" : l.started_at ? "started" : l.provisioned ? "built" : "new";
+  const a = actFor("lab", l.id);
+  const live = a ? (a.phase === "preparing" ? "preparing" : a.phase === "failed" || a.phase === "interrupted" ? "failed" : "active") : null;
+  const state = live || (labPassed(l) ? "passed" : r ? "graded" : l.started_at ? "started" : l.provisioned ? "built" : "new");
   const href = `#/lab/${l.id}`;
   const pct = Math.round((l.best || 0) * 100);
-  return h("article", { class: `lab-card hud ${state}` },
+  return h("article", { class: `lab-card hud ${state}${live && labPassed(l) ? " passed" : ""}` },
     h("header", {}, icon("lab"), h("span", {}, shortDomain(l.domain)),
       h("i", { class: "dom", style: { background: i < 0 ? "var(--muted)" : `var(--d${i + 1})` } }),
       h("span", { class: "grow" }), l.minutes ? h("span", { class: "min" }, icon("clock"), `${l.minutes} min`) : null),
@@ -777,11 +898,15 @@ function labCard(l, next) {
         l.needs.length ? h("span", { class: "tag" }, `needs ${l.needs.join(", ")}`) : null)),
     h("footer", {},
       h("div", { class: "prog" },
-        h("span", { class: "label-sm" }, { passed: "Passed", graded: "Last check", started: "Started", built: "Status", new: "Status" }[state]),
-        h("span", { class: "val" }, state === "passed" ? `all ${r ? r.total : ""} checks pass` : state === "graded" ? `${r.pass}/${r.total} checks · ${ago(r.at)}`
+        live ? h("span", { class: "state-badge " + live }, PHASE[a.phase]) :
+          h("span", { class: "label-sm" }, { passed: "Passed", graded: "Last check", started: "Started", built: "Status", new: "Status" }[state]),
+        h("span", { class: "val" }, live === "preparing" ? (S.state?.job?.progress || "setting up…") : live === "failed" ? (a.error || "setup failed")
+          : live === "active" ? (r ? `${r.pass}/${r.total} checks · ${ago(r.at)}` : `ready ${ago(a.ready_at || a.updated)}`)
+          : state === "passed" ? `all ${r ? r.total : ""} checks pass` : state === "graded" ? `${r.pass}/${r.total} checks · ${ago(r.at)}`
           : state === "started" ? ago(l.started_at) : state === "built" ? "built by spin up" : "not started"),
-        h("span", { class: "bar" }, h("i", { style: { width: `${pct}%` } }))),
-      h("a", { class: "btn" + (l === next ? " solid" : ""), href }, { passed: "Review", graded: "Continue", started: "Continue", built: "Start lab", new: "Start lab" }[state])));
+        h("span", { class: "bar" + (live === "preparing" ? " busy" : "") }, h("i", { style: { width: `${pct}%` } }))),
+      h("a", { class: "btn" + (live ? " cta" : l === next ? " solid" : ""), href },
+        live ? (live === "failed" ? "Open" : "Continue") : { passed: "Review", graded: "Continue", started: "Continue", built: "Start lab", new: "Start lab" }[state])));
 }
 
 async function viewOverview(main, focus) {
@@ -797,7 +922,7 @@ async function viewOverview(main, focus) {
   const examBest = Math.max(-1, ...data.exams.flatMap(e => e.history.map(x => x.score)));
   const graded = labs.filter(l => l.result);
   const checksPass = graded.reduce((a, l) => a + l.result.pass, 0), checksTotal = graded.reduce((a, l) => a + l.result.total, 0);
-  const next = labs.find(l => !labPassed(l));
+  const next = (act()?.kind === "lab" && labs.find(l => l.id === act().id)) || labs.find(l => !labPassed(l));
   const activeDays = (data.activity || []).filter(d => d.n).length;
 
   let filter = store.get("labFilter", "all");
@@ -821,6 +946,7 @@ async function viewOverview(main, focus) {
       h("span", { class: "sub" }, "120 minutes · weighted tasks · pass mark 66 %")),
     h("div", { class: "lab-grid" }, data.exams.map(e => {
       const running = e.deadline && !e.submitted_at && e.deadline * 1000 > Date.now();
+      const ea = actFor("exam", e.n);
       const best = e.history.length ? Math.max(...e.history.map(x => x.score)) : null;
       return h("article", { class: "lab-card exam-card hud" + (best != null && best >= 66 ? " passed" : "") },
         h("header", {}, icon("exam"), h("span", {}, "Mock exam ", h("b", {}, e.n)), h("span", { class: "grow" }),
@@ -829,6 +955,7 @@ async function viewOverview(main, focus) {
           h("h3", {}, h("a", { href: `#/exam/${e.n}` }, e.title.replace(/^CKA m/, "M").replace(/^CKA /, ""))),
           h("p", { class: "cur" }, `${e.tasks} tasks across all five exam domains, timed and weighted like the real exam.`),
           h("div", { class: "tags" },
+            ea && ea.phase === "preparing" ? h("span", { class: "state-badge preparing" }, "Preparing") : ea && ea.phase === "failed" ? h("span", { class: "state-badge failed" }, "Setup failed") : null,
             running ? h("span", { class: "tag mark" }, "in progress") : null,
             e.history.length ? e.history.slice(-5).map(x => h("span", { class: "tag " + (x.passed ? "pass" : "fail") }, `${x.score}%`))
               : !running && h("span", { class: "tag" }, "not attempted"))),
@@ -846,13 +973,13 @@ async function viewOverview(main, focus) {
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
     h("section", { class: "hero" },
       h("div", { class: "hero-text" },
-        h("div", { class: "kicker" }, "Certified Kubernetes Administrator (CKA) · Kubernetes v1.35"),
+        h("div", { class: "kicker" }, "Step 1 of 5 · Certified Kubernetes Administrator · v1.35"),
         h("h1", {}, "Hands-on practice for the CKA exam"),
         h("p", { class: "lead" }, "HelmYard is a set of ", h("b", {}, "31 labs"), " and ", h("b", {}, "two timed mock exams"),
           " that follow the CKA curriculum. You work on a seven-VM cluster that you build yourself, and every task is graded check by check. As in the exam, there are no hints."),
-        h("div", { class: "cta" },
-          next ? h("a", { class: "btn solid lg", href: `#/lab/${next.id}` }, next.started_at ? `Resume lab ${next.num}` : `Start lab ${next.num}`, icon("arrow"))
-            : h("a", { class: "btn solid lg", href: "#/exams" }, "Take a mock exam", icon("arrow")),
+        h("div", { class: "hero-cta" },
+          next ? h("a", { class: "btn cta lg", href: `#/lab/${next.id}` }, next.started_at || actFor("lab", next.id) ? `Resume lab ${next.num}` : `Start lab ${next.num}`, icon("arrow"))
+            : h("a", { class: "btn cta lg", href: "#/exams" }, "Take a mock exam", icon("arrow")),
           h("a", { class: "btn lg", href: "#/exams" }, "Mock exams"))),
       term),
     h("div", { class: "section-head" }, h("h2", {}, icon("chart"), "Your progress")),
@@ -909,6 +1036,13 @@ async function viewOverview(main, focus) {
     examsSection)));
   renderClusterBits();
   if (focus === "exams") examsSection.scrollIntoView();
+  let sig = JSON.stringify(act());
+  const off = State.on(st => {
+    const now = JSON.stringify(st.activity);
+    if (now !== sig) { const was = sig; sig = now; if (JSON.parse(was || "null")?.phase === "preparing") loadOverview().then(drawCards).catch(drawCards); else drawCards(); }
+    else if (st.activity?.phase === "preparing") drawCards();   // progress line
+  });
+  S.view = () => off();
 }
 
 // --- lab workspace ------------------------------------------------------------------------------------
@@ -1000,11 +1134,14 @@ async function viewLab(main, id, tabName) {
   const busy = () => !!S.jobs.current;
   // Start = `lab up`: builds missing prerequisite labs first (after asking), then runs setup.
   const startBtn = h("button", { class: "btn", onclick: async () => {
+    if (!(await confirmSwitch("lab", lab.id, `lab ${lab.num}`))) return;
     if (await confirmSpinUp(`Lab ${lab.num}`, missingPrereqs(lab.needs))) Jobs.start(S.overview?.can_spin_up ? "lab-up" : "lab-start", lab.id);
   } });
   const syncStartLabel = () => {
     const n = missingPrereqs(lab.needs).length;
-    startBtn.textContent = n ? "Spin up" : "Start";
+    const a = actFor("lab", lab.id);
+    if (a && a.phase === "preparing") { startBtn.textContent = "Preparing…"; startBtn.title = "Setup is running; follow it in the output panel"; return; }
+    startBtn.textContent = a && (a.phase === "failed" || a.phase === "interrupted") ? "Start again" : n ? "Spin up" : "Start";
     startBtn.title = n ? `Builds the ${n} unfinished lab${n > 1 ? "s" : ""} this one needs, then starts it` : "Run this lab's setup";
   };
   syncStartLabel();
@@ -1031,9 +1168,26 @@ async function viewLab(main, id, tabName) {
   const syncButtons = () => { for (const b of [startBtn, checkBtn, cleanBtn, ...phaseBtns]) if (b !== cleanBtn || lab.has_cleanup) b.disabled = busy(); };
   syncButtons();
   const offJobs = Jobs.on(syncButtons);
+  let phase = actFor("lab", lab.id)?.phase;
+  const offState = State.on(async () => {
+    const now = actFor("lab", lab.id)?.phase;
+    if (now !== phase) {
+      phase = now;
+      lab = await api(`/labs/${lab.id}`).catch(() => lab);
+      await loadOverview().catch(() => {});
+      byNum = labsByNum();
+      drawTabs();
+    }
+    syncStartLabel(); drawFacts(); syncButtons();
+  });
 
   const drawFacts = () => {
     const els = [];
+    const a = actFor("lab", lab.id);
+    if (a) els.push(h("span", { class: "state-badge " + (a.phase === "preparing" ? "preparing" : a.phase === "failed" || a.phase === "interrupted" ? "failed" : "active"),
+      title: a.error || "" }, PHASE[a.phase], a.phase === "preparing" ? ` · ${clock(serverNow() - a.since)}` : ""));
+    if (a && a.phase === "preparing" && S.state?.job?.progress) els.push(h("span", { class: "mono progress-line" }, S.state.job.progress));
+    if (a && (a.phase === "failed" || a.phase === "interrupted") && a.error) els.push(h("span", { class: "mono progress-line bad" }, a.error));
     if (lab.minutes) els.push(h("span", {}, h("span", { class: "mono" }, `${lab.minutes} min`), " suggested"));
     if (lab.started_at) {
       const mins = Math.round((Date.now() - Date.parse(lab.started_at)) / 60000);
@@ -1078,7 +1232,7 @@ async function viewLab(main, id, tabName) {
 
   doc.append(
     h("div", { class: "doc-head" },
-      h("div", { class: "eyebrow" }, h("a", { href: "#/" }, "← labs"), h("span", {}, "/"), h("span", { class: "id" }, `lab ${lab.num}`), h("span", {}, "·"), h("span", {}, shortDomain(lab.domain))),
+      h("div", { class: "eyebrow" }, h("a", { href: "#/cka" }, "← CKA labs"), h("span", {}, "/"), h("span", { class: "id" }, `lab ${lab.num}`), h("span", {}, "·"), h("span", {}, shortDomain(lab.domain))),
       h("h1", {}, lab.title), facts, actions),
     tabsEl, body, drawer);
 
@@ -1088,7 +1242,7 @@ async function viewLab(main, id, tabName) {
   drawFacts();
   await select(tab === "solution" && !store.get(`sol-${lab.id}`, false) ? "task" : tab);
   everyWhileHere(drawFacts, 30000);
-  S.view = () => { offJobs(); drawer.dispose(); };
+  S.view = () => { offJobs(); offState(); drawer.dispose(); };
 }
 
 // --- mock exams ----------------------------------------------------------------------------------------
@@ -1235,48 +1389,43 @@ const mins = s => s < 60 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`;
 function viewExamBriefing(main, exam) {
   const n = exam.n;
   const snapBox = h("input", { type: "checkbox", id: "snap", checked: true });
-  const startBtn = h("button", { class: "btn solid" }, "Start the exam");
+  const startBtn = h("button", { class: "btn cta" }, "Start the exam");
   const drawer = jobDrawer({ filter: j => j.target === String(n) || j.target === `before-exam${n}` });
   drawer.style.marginTop = "16px";
   startBtn.onclick = async () => {
     if (!S.overview) await loadOverview().catch(() => {});
     const missing = missingPrereqs(exam.needs || []);
+    if (!(await confirmSwitch("exam", String(n), `mock exam ${n}`))) return;
     if (!(await confirmSpinUp(`Mock exam ${n}`, missing))) return;
     const ok = await dialog({
       title: `Start mock exam ${n}?`,
       body: [p("Setting up the tasks takes a few minutes; some of them break the cluster on purpose. The 120-minute clock starts when setup finishes."),
-        snapBox.checked ? p("First the cluster is snapshotted as ", code(`before-exam${n}`), ", which stops the nodes for about three minutes.") : null],
+        snapBox.checked ? p("First the cluster is snapshotted as ", code(`before-exam${n}`), ", which stops the nodes for about three minutes.") : null,
+        p("It all runs on the jump host: you can leave this page, and the exam shows as preparing until it's ready.")],
       confirm: "Start",
     });
     if (!ok) return;
-    startBtn.disabled = true;
-    if (missing.length && S.overview?.can_spin_up) {   // build what the exam assumes before the snapshot
-      const j = await Jobs.start("exam-prep", String(n));
-      if (!j) { startBtn.disabled = false; return; }
-      if ((await Jobs.wait(j.id)).code !== 0) { toast("Spinning up the prerequisite labs failed; see the output.", true); startBtn.disabled = false; return; }
-      loadOverview().catch(() => {});
-    }
-    if (snapBox.checked) {
-      const j = await Jobs.start("snapshot", `before-exam${n}`);
-      if (!j) { startBtn.disabled = false; return; }
-      const done = await Jobs.wait(j.id);
-      if (done.code !== 0) { toast("The snapshot failed; the exam wasn't started.", true); startBtn.disabled = false; return; }
-      toast("Waiting for the nodes to come back…");
-      for (let i = 0; i < 40; i++) {           // the nodes are rebooting after the snapshot
-        const c = await pollCluster(true);
-        if (c && c.nodes && c.nodes.length && c.nodes.every(x => x.ready)) break;
-        await new Promise(r => setTimeout(r, 6000));
-      }
-    }
-    const j = await Jobs.start("exam-start", String(n));
-    if (!j) { startBtn.disabled = false; return; }
-    const done = await Jobs.wait(j.id);
-    if (done.code === 0) { store.set(`exam-${n}-idx`, 0); route(); }
-    else { toast("Exam setup failed; see the output.", true); startBtn.disabled = false; }
+    if (await Jobs.start("exam-begin", String(n), snapBox.checked ? "snapshot" : "")) store.set(`exam-${n}-idx`, 0);
   };
-  const busy = () => { startBtn.disabled = !!S.jobs.current; };
+  const prep = h("div");
+  const busy = () => {
+    const a = actFor("exam", String(n));
+    startBtn.disabled = !!S.jobs.current;
+    startBtn.textContent = a?.phase === "preparing" ? "Preparing…" : a && ["failed", "interrupted"].includes(a.phase) ? "Start again" : "Start the exam";
+    prep.replaceChildren(a?.phase === "preparing"
+      ? h("div", { class: "prep-panel" }, h("div", { class: "prep-head" }, h("span", { class: "spinner" }), h("b", {}, "Preparing the exam"), h("span", { class: "muted mono" }, clock(serverNow() - a.since))),
+          h("p", { class: "mono progress-line" }, S.state?.job?.progress || "starting…"))
+      : a && ["failed", "interrupted"].includes(a.phase) ? h("div", { class: "prep-panel bad" }, h("div", { class: "prep-head" }, h("b", {}, PHASE[a.phase])), a.error ? h("p", { class: "mono progress-line bad" }, a.error) : null)
+      : "");
+  };
   busy();
   const off = Jobs.on(busy);
+  let phase = actFor("exam", String(n))?.phase;
+  const offState = State.on(() => {
+    const now = actFor("exam", String(n))?.phase;
+    if (now !== phase && now === "ready") { route(); return; }
+    phase = now; busy();
+  });
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
     h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
     h("h1", { class: "page-title" }, exam.title.replace(/^CKA m/, "M").replace(/^CKA /, "")),
@@ -1289,12 +1438,12 @@ function viewExamBriefing(main, exam) {
         h("label", { class: "checkline", for: "snap" }, snapBox,
           h("span", {}, "Snapshot the cluster first as ", code(`before-exam${n}`), ". Recommended: afterwards one reset undoes everything the exam broke.")),
         h("div", { class: "checkline" }, h("span", { class: "muted" }, "The exam opens in a workspace with the tasks on the left and your terminal on the right. Docs links open in new tabs, as in the real exam.")),
-        startBtn,
+        prep, startBtn,
         exam.history.length ? h("div", { style: { marginTop: "22px" } }, h("div", { class: "check-section" }, "Earlier sittings"),
           exam.history.slice().reverse().map(x => h("div", { class: "check " + (x.passed ? "ok" : "no") },
             h("span", { class: "v" }, `${x.score}%`), h("span", { class: "muted" }, new Date(x.at).toLocaleString())))) : null,
         drawer)))));
-  S.view = () => { off(); drawer.dispose(); };
+  S.view = () => { off(); offState(); drawer.dispose(); };
 }
 
 async function viewExamResults(main, exam) {
@@ -1350,7 +1499,7 @@ async function viewExamResults(main, exam) {
 
 // --- Kubestronaut: the five certifications -----------------------------------------------------------
 
-const trackHref = t => t.id === "cka" ? "#/" : t.kind === "quiz" ? `#/quiz/${t.id}` : `#/track/${t.id}`;
+const trackHref = t => t.id === "cka" ? "#/cka" : t.kind === "quiz" ? `#/quiz/${t.id}` : `#/track/${t.id}`;
 
 function trackStats(t) {
   if (t.kind === "quiz") {
@@ -1363,39 +1512,12 @@ function trackStats(t) {
     big: t.labs ? `${t.labs_passed}/${t.labs}` : "—", sub: t.labs ? "labs passed" : "curriculum mapped, content coming" };
 }
 
-async function viewKubestronaut(main) {
-  const { tracks } = await api("/tracks");
-  const done = tracks.filter(t => trackStats(t).pct >= 100 || (t.kind === "quiz" && t.best_exam >= t.pass)).length;
-  main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("section", { class: "hero hero-slim" },
-      h("div", { class: "hero-text" },
-        h("div", { class: "kicker" }, "Kubestronaut"),
-        h("h1", {}, "All five Kubernetes certifications"),
-        h("p", { class: "lead" }, "Kubestronaut is the CNCF title for holding CKA, CKAD, CKS, KCNA and KCSA at the same time. Each track here follows its official curriculum, and every one is harder than the real exam: no hints, tighter clocks, fresh values on every attempt.")),
-      h("div", { class: "kube-count" }, h("b", {}, done), h("span", {}, "of 5 ready"))),
-    h("div", { class: "section-head" }, h("h2", {}, icon("exam"), "Tracks")),
-    h("div", { class: "track-grid" }, tracks.map(t => {
-      const st = trackStats(t);
-      return h("article", { class: `track-card hud ${t.status}` },
-        h("div", { class: "track-top" },
-          h("span", { class: "badge" }, t.short),
-          h("span", { class: "grow" }),
-          h("span", { class: "chip" + (t.status === "ready" ? "" : " muted") }, t.status === "ready" ? (t.kind === "quiz" ? "multiple choice" : "hands-on") : t.kind === "quiz" && t.bank ? "seed bank" : "in preparation")),
-        h("h3", {}, h("a", { href: trackHref(t) }, t.name)),
-        h("p", { class: "cur" }, `${t.kind === "quiz" ? `${t.bank || 0} in the bank, ${t.questions} per exam` : st.line} · ${t.minutes} min exam · pass ${t.pass}%${t.curriculum !== "current" ? ` · v${t.curriculum}` : ""}`),
-        h("div", { class: "track-num" }, h("b", {}, st.big), h("span", {}, st.sub)),
-        h("div", { class: "meter" }, h("i", { style: { width: `${st.pct}%` } })),
-        h("div", { class: "dombar", title: "Exam domains by weight" }, t.domains.map((d, i) => h("i", { style: { flex: d.weight, background: `var(--d${(i % 5) + 1})` }, title: `${d.name} · ${d.weight}%` }))),
-        h("a", { class: "btn" + (t.status === "ready" || t.bank ? " solid" : ""), href: trackHref(t) }, t.id === "cka" ? "Open CKA" : t.kind === "quiz" ? "Practise" : "Roadmap", icon("arrow")));
-    })))));
-}
-
 async function viewTrack(main, id) {
   const { tracks } = await api("/tracks");
   const t = tracks.find(x => x.id === id);
-  if (!t) { location.hash = "#/kubestronaut"; return; }
+  if (!t) { location.hash = "#/"; return; }
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "eyebrow" }, h("a", { href: "#/kubestronaut" }, "← Kubestronaut"), h("span", {}, "/"), h("span", { class: "id" }, t.short)),
+    h("div", { class: "eyebrow" }, h("a", { href: "#/" }, "← Roadmap"), h("span", {}, "/"), h("span", { class: "id" }, t.short)),
     h("h1", { class: "page-title" }, t.name),
     h("div", { class: "callout" }, h("b", {}, "In preparation. "), `The ${t.short} labs, speed drills and mock exams are being written against curriculum v${t.curriculum}, at the same extreme difficulty as the CKA track. The domains they will cover, with their exam weights:`),
     h("div", { class: "track-domains" }, t.domains.map((d, i) => h("div", { class: "hud dom-card" },
@@ -1408,7 +1530,7 @@ async function viewTrack(main, id) {
 async function viewQuizTrack(main, id) {
   const [{ tracks }, { history }] = await Promise.all([api("/tracks"), api(`/quiz/${id}/history`)]);
   const t = tracks.find(x => x.id === id);
-  if (!t) { location.hash = "#/kubestronaut"; return; }
+  if (!t) { location.hash = "#/"; return; }
   const exams = history.filter(x => x.mode === "exam");
   // Per-domain accuracy over every sitting (practice and exam).
   const acc = Object.fromEntries(t.domains.map(d => [d.key, [0, 0]]));
@@ -1421,7 +1543,7 @@ async function viewQuizTrack(main, id) {
   };
   const examMin = Math.round(t.minutes * 0.8);
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "eyebrow" }, h("a", { href: "#/kubestronaut" }, "← Kubestronaut"), h("span", {}, "/"), h("span", { class: "id" }, t.short)),
+    h("div", { class: "eyebrow" }, h("a", { href: "#/" }, "← Roadmap"), h("span", {}, "/"), h("span", { class: "id" }, t.short)),
     h("h1", { class: "page-title" }, t.name),
     h("section", { class: "progress" },
       h("div", { class: "readiness hud" },
@@ -1538,32 +1660,45 @@ async function viewSitting(main, sid, mode) {
 const domainVar = key => { const i = DOMAINS.indexOf(domainOf(key)); return i < 0 ? "var(--muted)" : `var(--d${i + 1})`; };
 
 async function viewDrills(main) {
-  const { drills } = await api("/drills");
+  let { drills } = await api("/drills");
   const runs = drills.reduce((a, d) => a + d.attempts, 0);
   const inside = drills.filter(d => d.best != null && d.best <= d.seconds).length;
   const card = d => {
-    const state = d.best == null ? "" : d.best <= d.seconds ? "passed" : "graded";
+    const a = actFor("drill", d.id);
+    const live = a ? (a.phase === "preparing" ? "preparing" : a.phase === "failed" || a.phase === "interrupted" ? "failed" : "active") : null;
+    const state = (live || "") + " " + (d.best == null ? "" : d.best <= d.seconds ? "passed" : "graded");
     return h("article", { class: `lab-card drill-card hud ${state}` },
       h("header", {}, icon("clock"), h("span", {}, shortDomain(d.domain)), h("i", { class: "dom", style: { background: domainVar(d.domain) } }),
         h("span", { class: "grow" }), h("span", { class: "min" }, `${clock(d.seconds)} budget`)),
       h("div", { class: "body" },
         h("h3", {}, h("a", { href: `#/drill/${d.id}` }, h("span", { class: "no" }, d.num), d.title)),
-        h("div", { class: "tags" }, d.needs.length ? h("span", { class: "tag" }, `needs ${d.needs.join(", ")}`) : null,
+        h("div", { class: "tags" }, live ? h("span", { class: "state-badge " + live }, live === "active" ? "Clock running" : PHASE[a.phase]) : null,
+          d.needs.length ? h("span", { class: "tag" }, `needs ${d.needs.join(", ")}`) : null,
           d.attempts ? h("span", { class: "tag" }, `${d.attempts} run${d.attempts > 1 ? "s" : ""}`) : h("span", { class: "tag" }, "not tried"))),
       h("footer", {},
         h("div", { class: "prog" }, h("span", { class: "label-sm" }, "Best time"),
           h("span", { class: "val" }, d.best == null ? "—" : `${clock(d.best)}${d.best <= d.seconds ? "" : " (over budget)"}`),
           h("span", { class: "bar" }, h("i", { style: { width: `${d.best == null ? 0 : Math.min(100, (d.seconds / d.best) * 100)}%` } }))),
-        h("a", { class: "btn", href: `#/drill/${d.id}` }, d.started ? "Continue" : "Open")));
+        h("a", { class: "btn" + (live ? " cta" : ""), href: `#/drill/${d.id}` }, d.started || live ? "Continue" : "Open")));
   };
+  const grid = h("div", { class: "lab-grid" }, drills.map(card));
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
     h("div", { class: "section-head", style: { marginTop: 0 } }, h("h2", {}, icon("clock"), "Speed drills"),
       h("span", { class: "sub" }, `${inside} of ${drills.length} inside the budget · ${runs} run${runs === 1 ? "" : "s"}`)),
     h("div", { class: "callout" }, h("b", {}, "One task, a tight clock. "),
       "Budgets are shorter than the real exam allows. Every start draws new names and numbers, so you can't memorise answers. The clock runs until every check passes."),
     h("div", { class: "actions", style: { margin: "0 0 18px" } },
-      h("button", { class: "btn solid", onclick: () => { const d = drills[Math.floor(Math.random() * drills.length)]; location.hash = `#/drill/${d.id}`; } }, "Random drill", icon("arrow"))),
-    h("div", { class: "lab-grid" }, drills.map(card)))));
+      h("button", { class: "btn cta", onclick: () => { const d = drills[Math.floor(Math.random() * drills.length)]; location.hash = `#/drill/${d.id}`; } }, "Random drill", icon("arrow"))),
+    grid)));
+  let sig = JSON.stringify(act());
+  const off = State.on(async st => {
+    const now = JSON.stringify(st.activity);
+    if (now === sig) return;
+    sig = now;
+    try { drills = (await api("/drills")).drills; } catch { /* keep the old list */ }
+    grid.replaceChildren(...drills.map(card));
+  });
+  S.view = () => off();
 }
 
 async function viewDrill(main, id) {
@@ -1585,12 +1720,18 @@ async function viewDrill(main, id) {
   const startBtn = h("button", { class: "btn" }, "Start");
   startBtn.onclick = async () => {
     if (d.started && !(await dialog({ title: "Start again?", body: p("This draws new values and resets the clock. The current attempt is abandoned."), confirm: "Start over" }))) return;
+    if (!(await confirmSwitch("drill", d.id, `drill ${d.num}`))) return;
     Jobs.start("drill-start", d.id);
   };
   const checkBtn = h("button", { class: "btn solid", onclick: () => Jobs.start("drill-check", d.id) }, "Check");
   const cleanBtn = h("button", { class: "btn", onclick: () => Jobs.start("drill-cleanup", d.id) }, "Clean up");
   actions.append(startBtn, checkBtn, cleanBtn);
-  const sync = () => { startBtn.disabled = busy(); checkBtn.disabled = busy() || !d.started; cleanBtn.disabled = busy(); };
+  const sync = () => {
+    const a = actFor("drill", d.id);
+    startBtn.disabled = busy(); checkBtn.disabled = busy() || !d.started; cleanBtn.disabled = busy();
+    startBtn.textContent = a?.phase === "preparing" ? "Preparing…" : a && (a.phase === "failed" || a.phase === "interrupted") ? "Start again" : d.started ? "Restart" : "Start";
+    startBtn.className = "btn" + (!d.started && !a ? " cta" : "");
+  };
   const offJobs = Jobs.on(sync);
   const tick = () => {
     if (!d.started) { clockEl.className = "clock"; clockEl.replaceChildren(h("span", { class: "t" }, clock(d.seconds)), h("span", { class: "muted" }, "budget")); return; }
@@ -1599,9 +1740,20 @@ async function viewDrill(main, id) {
     clockEl.className = "clock" + (used > d.seconds ? " low" : "");
     clockEl.replaceChildren(h("span", { class: "t" }, clock(used)), h("span", { class: "muted" }, done ? "done" : `of ${clock(d.seconds)}`));
   };
+  const prepPanel = a => a.phase === "preparing"
+    ? h("div", { class: "prep-panel" }, h("div", { class: "prep-head" }, h("span", { class: "spinner" }), h("b", {}, "Preparing the drill"),
+        h("span", { class: "muted mono" }, clock(serverNow() - a.since))),
+      h("p", { class: "mono progress-line" }, S.state?.job?.progress || "starting…"),
+      h("p", { class: "muted" }, "You can leave this page; setup carries on and this drill shows as preparing everywhere. The task and the clock appear when it's ready."))
+    : h("div", { class: "prep-panel bad" }, h("div", { class: "prep-head" }, h("b", {}, PHASE[a.phase])),
+      a.error ? h("p", { class: "mono progress-line bad" }, a.error) : null,
+      h("p", { class: "muted" }, "Look at the output below, fix what it complains about (often: the cluster isn't up yet), then start again."));
   const draw = () => {
+    const a = actFor("drill", d.id);
+    const pending = a && a.phase !== "ready";
     body.replaceChildren(...[
-      d.started ? renderMarkdown(d.markdown) : h("div", { class: "empty" }, h("b", {}, "Press Start. "),
+      pending ? prepPanel(a) : null,
+      pending ? null : d.started ? renderMarkdown(d.markdown) : h("div", { class: "empty" }, h("b", {}, "Press Start. "),
         "Setup takes a few seconds; the task appears and the clock starts as soon as it's ready."),
       d.result ? h("div", {}, h("div", { class: "check-section" }, "Last check"), resultsView(d.result)) : null,
       d.history.length ? h("div", {}, h("div", { class: "check-section" }, "Your times"),
@@ -1621,7 +1773,217 @@ async function viewDrill(main, id) {
   Terms.mount(ws);
   draw();
   everyWhileHere(tick, 1000);
-  S.view = () => { offJobs(); drawer.dispose(); };
+  let phase = actFor("drill", d.id)?.phase;
+  const offState = State.on(async () => {
+    const now = actFor("drill", d.id)?.phase;
+    if (now !== phase) { phase = now; await reload(); }
+    else if (now === "preparing") draw();
+  });
+  S.view = () => { offJobs(); offState(); drawer.dispose(); };
+}
+
+// --- the roadmap: home page --------------------------------------------------------------------------
+
+// Where a track stands: done, the one you're on, or later. A hands-on track counts its labs
+// passed; a multiple-choice one its best mock exam against the pass mark.
+function stepState(t) {
+  const st = trackStats(t);
+  const done = t.kind === "quiz" ? t.best_exam != null && t.best_exam >= t.pass : t.labs > 0 && t.labs_passed === t.labs;
+  return { ...st, done };
+}
+
+function powerTile() {
+  const pw = S.state?.power, c = S.cluster;
+  const nodes = c?.nodes || [];
+  const ready = nodes.filter(n => n.ready).length;
+  const off = pw?.known && pw.nodes && pw.nodes_running === 0;
+  const busy = !!S.jobs.current;
+  return h("div", { class: "now-tile hud" },
+    h("div", { class: "label-sm" }, icon("server"), "Cluster"),
+    h("div", { class: "now-big" }, off ? "Off" : nodes.length ? `${ready}/${nodes.length} Ready` : pw?.nodes_running ? `${pw.nodes_running}/${pw.nodes} VMs on` : "—"),
+    h("p", { class: "muted" }, off ? "The cluster VMs are shut down. Lab commands start them when they need them." : nodes.length ? `Kubernetes ${nodes[0].version || ""}` : "No Kubernetes cluster yet: lab 01 builds it, or spin up the playground."),
+    h("div", { class: "now-actions" },
+      off ? h("button", { class: "btn sm solid", disabled: busy, onclick: () => Jobs.start("power", "on") }, "Start the cluster")
+        : pw?.nodes_running ? h("button", { class: "btn sm", disabled: busy, onclick: powerOffNodes }, "Shut down the cluster") : null,
+      h("a", { class: "btn sm quiet", href: "#/cluster" }, "Details")));
+}
+
+function idleTile() {
+  const pw = S.state?.power;
+  const left = pw?.idle_left;
+  return h("div", { class: "now-tile hud" },
+    h("div", { class: "label-sm" }, icon("clock"), "Auto shutdown"),
+    h("div", { class: "now-big" }, !pw ? "—" : pw.idle_minutes <= 0 ? "Never" : left == null ? "Paused" : clock(left)),
+    h("p", { class: "muted" }, !pw ? "" : pw.idle_minutes <= 0 ? "HelmYard stays on until you shut it down."
+      : left == null ? (pw.awake_until > serverNow() ? `Kept on until ${new Date(pw.awake_until * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : "Something is running (a job or a mock exam), so it waits.")
+        : `After ${pw.idle_minutes} min without use the cluster and the jump host shut down. The gate starts them again.`),
+    h("div", { class: "now-actions" }, h("a", { class: "btn sm quiet", href: "#/cluster" }, "Change")));
+}
+
+function workingTile() {
+  const a = act();
+  return h("div", { class: "now-tile hud wide" + (a ? " " + (a.phase === "preparing" ? "preparing" : ["failed", "interrupted"].includes(a.phase) ? "failed" : "active") : "") },
+    h("div", { class: "label-sm" }, icon("lab"), "Working on"),
+    a ? [h("div", { class: "now-big" }, actName(a)),
+        h("p", {}, a.title && a.kind !== "playground" ? a.title : "A working cluster to try things on"),
+        h("p", { class: "mono progress-line" + (["failed", "interrupted"].includes(a.phase) ? " bad" : "") },
+          a.phase === "preparing" ? `${PHASE.preparing} · ${clock(serverNow() - a.since)} · ${S.state?.job?.progress || ""}` : `${PHASE[a.phase]}${a.error ? ` · ${a.error}` : ""}`),
+        h("div", { class: "now-actions" }, h("a", { class: "btn sm cta", href: actHref(a) }, a.phase === "preparing" ? "Watch it" : "Continue", icon("arrow")))]
+      : [h("div", { class: "now-big" }, "Nothing yet"),
+        h("p", { class: "muted" }, "Pick up the next lab on your roadmap, run a speed drill, or open the playground to try commands on a working cluster."),
+        h("div", { class: "now-actions" }, h("a", { class: "btn sm", href: "#/playground" }, "Playground"), h("a", { class: "btn sm quiet", href: "#/drills" }, "Drills"))]);
+}
+
+async function powerOffNodes() {
+  if (await dialog({ title: "Shut down the cluster?", body: [p("The five Kubernetes nodes and the NFS server shut down cleanly. Nothing is lost: the next lab command starts them again, with everything as it was."),
+    p("The jump host and this console stay on.")], confirm: "Shut down" })) Jobs.start("power", "off");
+}
+
+async function viewRoadmap(main) {
+  const [{ tracks }] = await Promise.all([api("/tracks"), S.overview ? null : loadOverview().catch(() => null)]);
+  S.tracks = tracks;
+  const steps = tracks.map(t => ({ t, st: stepState(t) }));
+  const current = steps.find(x => !x.st.done) || steps[steps.length - 1];
+  const done = steps.filter(x => x.st.done).length;
+  const labs = S.overview?.labs || [];
+  const nextLab = (act()?.kind === "lab" && labs.find(l => l.id === act().id)) || labs.find(l => !labPassed(l));
+
+  const nowRow = h("section", { class: "now-row" });
+  const drawNow = () => nowRow.replaceChildren(workingTile(), powerTile(), idleTile());
+  drawNow();
+
+  const cta = () => {
+    const a = act();
+    if (a) return h("a", { class: "btn cta lg", href: actHref(a) }, a.phase === "preparing" ? `${actName(a)}: preparing` : `Continue ${actName(a).toLowerCase()}`, icon("arrow"));
+    if (current.t.id === "cka" && nextLab) return h("a", { class: "btn cta lg", href: `#/lab/${nextLab.id}` }, `${nextLab.started_at ? "Resume" : "Start"} CKA lab ${nextLab.num}`, icon("arrow"));
+    return h("a", { class: "btn cta lg", href: trackHref(current.t) }, `Continue with ${current.t.short}`, icon("arrow"));
+  };
+
+  const stepEl = ({ t, st }, i) => {
+    const state = st.done ? "done" : t === current.t ? "current" : "later";
+    const ready = t.status === "ready" || (t.kind === "quiz" && t.bank);
+    return h("li", { class: `rm-step ${state}` },
+      h("div", { class: "rm-rail" }, h("span", { class: "rm-node" }, st.done ? "✓" : t.step || i + 1)),
+      h("article", { class: "rm-card hud" },
+        h("div", { class: "rm-top" },
+          h("span", { class: "badge" }, t.short),
+          h("span", { class: "rm-kind" }, t.kind === "quiz" ? "multiple choice" : "hands-on"),
+          h("span", { class: "grow" }),
+          state === "current" ? h("span", { class: "state-badge active" }, "You are here") : st.done ? h("span", { class: "state-badge done" }, "Ready for the exam") : null,
+          !ready ? h("span", { class: "chip muted" }, t.kind === "quiz" ? "question bank growing" : "content in preparation") : null),
+        h("h3", {}, h("a", { href: trackHref(t) }, t.name)),
+        h("p", { class: "rm-pitch" }, t.pitch || ""),
+        t.requires ? h("p", { class: "rm-req" }, `Requires a passed ${t.requires.toUpperCase()}.`) : null,
+        h("div", { class: "rm-stats" },
+          st.big === "—" ? null : h("div", { class: "track-num" }, h("b", {}, st.big), h("span", {}, st.sub)),
+          h("span", { class: "muted rm-line" }, `${st.line} · ${t.minutes} min exam · pass ${t.pass}%${t.curriculum !== "current" ? ` · v${t.curriculum}` : ""}`)),
+        h("div", { class: "meter" }, h("i", { style: { width: `${st.pct}%` } })),
+        h("div", { class: "dombar", title: "Exam domains by weight" }, t.domains.map((d, k) => h("i", { style: { flex: d.weight, background: `var(--d${(k % 5) + 1})` }, title: `${d.name} · ${d.weight}%` }))),
+        h("div", { class: "rm-actions" },
+          h("a", { class: "btn" + (state === "current" ? " solid" : ""), href: trackHref(t) },
+            t.id === "cka" ? "Open the CKA labs" : t.kind === "quiz" ? "Practise" : ready ? `Open ${t.short}` : "See the plan", icon("arrow")))));
+  };
+
+  main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
+    h("section", { class: "hero rm-hero" },
+      h("div", { class: "hero-text" },
+        h("div", { class: "kicker" }, "Kubestronaut roadmap"),
+        h("h1", {}, "Five certifications, ", h("span", { class: "hl" }, "one cluster"), ", harder than the real thing."),
+        h("p", { class: "lead" }, "Start with the CKA and build a highly available cluster from bare Ubuntu. Then secure it for the CKS, ship applications on it for the CKAD, and finish with the KCNA and KCSA. Each track follows its official curriculum, with no hints and tighter clocks than the real exam."),
+        h("div", { class: "hero-cta" }, cta(), h("a", { class: "btn lg", href: "#/playground" }, "Open the playground"))),
+      h("div", { class: "rm-mascot" },
+        h("img", { src: "/static/brand/helmyard-mascot.png", alt: "HelmYard: a ship's wheel around a little server house, in a playground" }),
+        h("div", { class: "rm-count" }, h("b", {}, done), h("span", {}, "of 5 ready")))),
+    nowRow,
+    h("div", { class: "section-head" }, h("h2", {}, icon("arrow"), "Your roadmap"), h("span", { class: "sub" }, "CKA → CKS → CKAD → KCNA → KCSA")),
+    h("ol", { class: "roadmap" }, steps.map(stepEl)))));
+  const off = State.on(drawNow);
+  const t = setInterval(drawNow, 1000);
+  S.timers.push(t);
+  pollCluster().then(drawNow);
+  S.view = () => off();
+}
+
+// --- the playground: a working cluster to experiment on, nothing graded ------------------------------------
+
+const PLAYGROUNDS = [
+  { id: "core", name: "Core cluster", labs: "01–05, 07",
+    what: ["3 control planes behind HAProxy, 2 workers", "Calico networking", "Kubernetes v1.35, upgraded with kubeadm"] },
+  { id: "full", name: "Full stack", labs: "core + 09, 10, 20, 22, 23, 25",
+    what: ["Everything in the core cluster", "metrics-server, Helm, cert-manager", "MetalLB, Traefik Ingress, Envoy Gateway", "NFS storage with a default StorageClass"] },
+];
+
+async function viewPlayground(main) {
+  if (!S.overview) await loadOverview().catch(() => {});
+  const doc = h("section", { class: "doc" });
+  const body = h("div", { class: "doc-body" });
+  const drawer = jobDrawer({ filter: j => j.action === "playground" || j.action === "power", onEnd: () => { loadOverview().catch(() => {}); pollCluster(true).then(draw); } });
+  const nodesBox = h("div", { class: "pg-nodes" });
+
+  const spinUp = async pg => {
+    if (!(await confirmSwitch("playground", pg.id, `the ${pg.name.toLowerCase()} playground`))) return;
+    const labsByN = labsByNum();
+    const mine = Object.values(labsByN).filter(l => l.started_at && !labPassed(l) && !l.provisioned && Number(l.num) <= 7);
+    const ok = await dialog({
+      title: `Spin up the ${pg.name.toLowerCase()}?`, confirm: "Spin up",
+      body: [p("The reference solutions build what's missing, out of sight; anything already in place is kept. From the cached core cluster that takes a few minutes, from bare Ubuntu half an hour or more."),
+        mine.length ? p(h("b", {}, "Heads up: "), `you've started lab${mine.length > 1 ? "s" : ""} ${mine.map(l => l.num).join(", ")} yourself. Spinning up finishes ${mine.length > 1 ? "them" : "it"} for you (marked as built, not as passed). Take a snapshot first if you want to come back to your own attempt.`) : null,
+        p("Nothing here is graded. Break things freely, and reset to a snapshot on the Cluster page when you're done.")],
+    });
+    if (ok) Jobs.start("playground", pg.id);
+  };
+
+  const draw = () => {
+    const a = actFor("playground", act()?.id || "");
+    const c = S.cluster, pw = S.state?.power;
+    const nodes = c?.nodes || [];
+    const off = pw?.known && pw.nodes && pw.nodes_running === 0;
+    const busy = !!S.jobs.current;
+    nodesBox.replaceChildren(...[
+      h("div", { class: "pg-status" },
+        h("span", { class: "dot " + (off ? "" : nodes.length && nodes.every(n => n.ready) ? "ok" : nodes.length ? "bad" : "warn") }),
+        h("b", {}, off ? "Cluster off" : nodes.length ? `${nodes.filter(n => n.ready).length}/${nodes.length} nodes Ready` : "No Kubernetes cluster yet"),
+        h("span", { class: "grow" }),
+        off ? h("button", { class: "btn sm solid", disabled: busy, onclick: () => Jobs.start("power", "on") }, "Start the VMs")
+          : pw?.nodes_running ? h("button", { class: "btn sm", disabled: busy, onclick: powerOffNodes }, "Shut down") : null),
+      nodes.length ? h("div", { class: "pg-node-list" }, nodes.map(n => h("span", { class: "pg-node " + (n.ready ? "ok" : "bad") }, h("span", { class: "dot " + (n.ready ? "ok" : "bad") }), n.name,
+        h("small", {}, n.roles.join(",") || "worker")))) : null].filter(Boolean));
+    body.replaceChildren(...[
+      a ? h("div", { class: "prep-panel" + (["failed", "interrupted"].includes(a.phase) ? " bad" : a.phase === "preparing" ? "" : " ok") },
+        h("div", { class: "prep-head" }, a.phase === "preparing" ? h("span", { class: "spinner" }) : null, h("b", {}, `${PHASE[a.phase]}: ${a.id} playground`),
+          a.phase === "preparing" ? h("span", { class: "muted mono" }, clock(serverNow() - a.since)) : null),
+        a.phase === "preparing" ? h("p", { class: "mono progress-line" }, S.state?.job?.progress || "starting…")
+          : a.error ? h("p", { class: "mono progress-line bad" }, a.error)
+          : h("p", {}, "It's yours. Try ", h("code", { class: "mono" }, "kubectl get nodes -o wide"), " in the terminal.")) : null,
+      nodesBox,
+      h("div", { class: "check-section" }, "Spin up"),
+      h("div", { class: "pg-presets" }, PLAYGROUNDS.map(pg => h("div", { class: "pg-card hud" + (a?.id === pg.id ? " on" : "") },
+        h("div", { class: "pg-card-head" }, h("b", {}, pg.name), h("span", { class: "chip" }, `labs ${pg.labs}`)),
+        h("ul", {}, pg.what.map(x => h("li", {}, x))),
+        h("button", { class: "btn " + (a?.id === pg.id && a.phase === "ready" ? "" : "cta"), disabled: busy || !S.overview?.can_spin_up, onclick: () => spinUp(pg) },
+          a?.id === pg.id && a.phase === "preparing" ? "Preparing…" : a?.id === pg.id && a.phase === "ready" ? "Check it's all there" : "Spin up")))),
+      S.overview?.can_spin_up ? null : h("div", { class: "callout" }, "Spinning up needs the reference solutions on the jump host (infra/install-lab.sh --solutions)."),
+      h("div", { class: "check-section" }, "Good to know"),
+      h("ul", { class: "pg-tips" },
+        h("li", {}, "The terminal is a shell on the jump host with ", h("code", { class: "mono" }, "kubectl"), ", ", h("code", { class: "mono" }, "helm"), " and SSH to every node (", h("code", { class: "mono" }, "ssh cp1"), ")."),
+        h("li", {}, "The cluster is the same one the labs use. ", h("a", { href: "#/cluster" }, "Take a snapshot"), " before you experiment, and reset to it afterwards."),
+        h("li", {}, "Nothing here is graded or timed. It still counts as use, so HelmYard stays on while you work."))].filter(Boolean));
+  };
+
+  doc.append(
+    h("div", { class: "doc-head" },
+      h("div", { class: "eyebrow" }, h("a", { href: "#/" }, "← roadmap"), h("span", {}, "/"), h("span", { class: "id" }, "playground")),
+      h("h1", {}, "Playground"),
+      h("p", { class: "lead-sm" }, "A working cluster to try commands on. No tasks, no grading, no clock.")),
+    body, drawer);
+  const ws = h("div", { class: "workspace" }, doc, gutter(doc, "pgDocWidth"));
+  main.replaceChildren(ws);
+  Terms.mount(ws);
+  draw();
+  pollCluster(true).then(draw);
+  everyWhileHere(() => pollCluster(true).then(draw), 15000);
+  const off = State.on(draw);
+  S.view = () => { off(); drawer.dispose(); };
 }
 
 // --- cluster and snapshots ---------------------------------------------------------------------------------
@@ -1631,7 +1993,7 @@ async function viewCluster(main) {
   const snaps = h("tbody");
   const snapNote = h("div");
   const jobsList = h("div");
-  const drawer = jobDrawer({ filter: j => j.action.startsWith("snapshot") || j.action === "reset", onEnd: () => { drawSnaps(); } });
+  const drawer = jobDrawer({ filter: j => j.action.startsWith("snapshot") || j.action === "reset" || j.action === "power", onEnd: () => { drawSnaps(); } });
 
   const drawRack = c => {
     if (!c) return;
@@ -1712,8 +2074,49 @@ async function viewCluster(main) {
     h("span", { class: "v" }, j.ended == null ? "…" : j.code === 0 ? "OK" : `E${j.code}`),
     h("span", {}, h("a", { href: "#/cluster", class: "mono", onclick: e => { e.preventDefault(); showJobDialog(j); } }, j.label), h("span", { class: "muted" }, ` · ${ago(j.started)}`)))));
 
+  const powerBox = h("div", { class: "power-box hud" });
+  let canPower = null;
+  const drawPower = async () => {
+    if (canPower === null) { try { canPower = (await api("/power")).can_power; } catch { return; } }
+    if (powerBox.contains(document.activeElement) && document.activeElement.tagName === "SELECT") return;
+    const pw = S.state?.power || {};
+    const ps = { ...pw, can_power: canPower };
+    const busy = !!S.jobs.current;
+    const sel = h("select", { class: "field sm", "aria-label": "Shut down after",
+      onchange: async e => { e.target.blur(); await api("/power", { method: "PUT", body: { idle_minutes: Number(e.target.value) } }).catch(x => toast(x.message, true)); await State.kick(); } },
+      [[15, "15 minutes"], [30, "30 minutes"], [60, "1 hour"], [120, "2 hours"], [240, "4 hours"], [0, "never"]]
+        .concat([15, 30, 60, 120, 240, 0].includes(ps.idle_minutes) ? [] : [[ps.idle_minutes, `${ps.idle_minutes} minutes`]])
+        .map(([v, l]) => h("option", { value: v, selected: v === ps.idle_minutes }, l)));
+    const awake = ps.awake_until > serverNow();
+    powerBox.replaceChildren(
+      h("div", { class: "power-col" },
+        h("div", { class: "label-sm" }, "Cluster VMs"),
+        h("div", { class: "now-big" }, pw.known ? `${pw.nodes_running}/${pw.nodes} on` : "—"),
+        h("div", { class: "now-actions" },
+          h("button", { class: "btn sm solid", disabled: busy || !ps.can_power || (pw.known && pw.nodes_running === pw.nodes), onclick: () => Jobs.start("power", "on") }, "Start"),
+          h("button", { class: "btn sm", disabled: busy || !ps.can_power || pw.nodes_running === 0, onclick: powerOffNodes }, "Shut down"))),
+      h("div", { class: "power-col" },
+        h("div", { class: "label-sm" }, "Auto shutdown when idle"),
+        h("div", { class: "power-line" }, "After ", sel),
+        h("p", { class: "muted" }, ps.idle_minutes <= 0 ? "Off: HelmYard runs until you shut it down." : ps.idle_left == null ? "Paused while a job or a mock exam runs, or while kept on." : `In ${clock(ps.idle_left)} if nothing happens.`),
+        h("div", { class: "now-actions" }, awake
+          ? h("button", { class: "btn sm", onclick: async () => { await api("/power", { method: "PUT", body: { awake_hours: 0 } }); State.kick(); } }, `Kept on until ${new Date(ps.awake_until * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · cancel`)
+          : h("button", { class: "btn sm", onclick: async () => { await api("/power", { method: "PUT", body: { awake_hours: 3 } }); State.kick(); } }, "Keep on for 3 hours"))),
+      h("div", { class: "power-col" },
+        h("div", { class: "label-sm" }, "Everything"),
+        h("p", { class: "muted" }, "Shut down the cluster, then this jump host. Start HelmYard again from the gate page", store.get("gateUrl", null) ? [" (", h("a", { href: store.get("gateUrl"), class: "mono" }, store.get("gateUrl")), ")"] : "", "."),
+        h("div", { class: "now-actions" }, h("button", { class: "btn sm danger", disabled: busy || !ps.can_power, onclick: async () => {
+          if (await dialog({ title: "Shut down HelmYard?", danger: true, confirm: "Shut down",
+            body: [p("The cluster VMs shut down cleanly, then the jump host. Your labs, grades, notes and open work stay on disk."),
+              p("Open shells in the terminal are closed. Start it again from the gate page.")] })) Jobs.start("power", "shutdown");
+        } }, "Shut down everything"))));
+  };
+  drawPower();
+
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "section-head", style: { marginTop: 0 } }, h("h2", {}, icon("server"), "Machines"), h("span", { class: "grow" }),
+    h("div", { class: "section-head", style: { marginTop: 0 } }, h("h2", {}, icon("clock"), "Power")),
+    powerBox,
+    h("div", { class: "section-head" }, h("h2", {}, icon("server"), "Machines"), h("span", { class: "grow" }),
       h("span", { class: "muted", style: { fontSize: "13px" } }, "Proxmox power state and Kubernetes node status, refreshed every 10 s")),
     h("div", { class: "rack-box hud" }, h("table", { class: "rack" },
       h("thead", {}, h("tr", {}, ["VM", "ID", "Address", "Size", "Power", "Kubernetes"].map(t => h("th", {}, t)))), rack)),
@@ -1731,12 +2134,13 @@ async function viewCluster(main) {
 
   const busy = () => { takeBtn.disabled = !!S.jobs.current; drawJobs(); };
   busy();
-  const off = Jobs.on(ev => { busy(); if (ev.type !== "out") drawSnaps(); });
+  const off = Jobs.on(ev => { busy(); if (ev.type !== "out") { drawSnaps(); drawPower(); } });
+  const offState = State.on(() => drawPower());
   drawRack(S.cluster);
   pollCluster(true).then(drawRack);
   drawSnaps();
   everyWhileHere(() => pollCluster(true).then(drawRack), 10000);
-  S.view = () => { off(); drawer.dispose(); };
+  S.view = () => { off(); offState(); drawer.dispose(); };
 }
 
 // After a reset the jump host itself rolls back: wait for this server to go away and come back.
@@ -1767,6 +2171,8 @@ async function boot() {
   if (!h0.authed) { showLogin(); return; }
   $("#app").replaceChildren(renderTop(), h("main", { id: "main", style: { flex: "1", display: "flex", flexDirection: "column", minHeight: "0" } }));
   await Jobs.sync();
+  await State.poll();
+  State.start();
   pollCluster();
   if (!S.polling) S.polling = setInterval(pollCluster, 20000);
   route();
