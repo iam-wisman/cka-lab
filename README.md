@@ -212,12 +212,17 @@ How it's built:
   Surface `#162B4D`, Kube Blue `#326CE5`, Playground Orange `#FF8E3C`, Lively
   Teal `#1CD1A1`, Slate `#8A99AD`), wordmark lockups, favicon, and CSS, Tailwind
   and W3C design tokens. `docs/brand/build.py` draws the helm-and-server mark as
-  SVG (colour and reversed) and the README banner. The console follows the
-  kit: dark first, Night Navy canvas with a faint dot grid, Deep Surface cards,
-  Kube Blue buttons, Playground Orange for the main calls to action and for
-  anything being prepared, Lively Teal for healthy and passed. Small blue text
-  never sits on navy (the kit's 3.5:1 contrast rule), so links use a lighter
-  tint. The roadmap hero shows the kit's mascot. Interface text is Inter;
+  SVG (colour and reversed) and the README banner. The console uses the kit's
+  light variant: a Cloud canvas (`#F8FAFC`) with a faint dot grid, white cards
+  and Night Navy text, under a Night Navy top bar; terminals stay dark. Kube
+  Blue for buttons, Playground Orange for the main calls to action and anything
+  being prepared, teal for healthy and passed, each darkened when it's small
+  text so it stays readable on white. The roadmap hero shows the kit's mascot.
+  The page declares `color-scheme: only light` and `darkreader-lock`, so
+  browser dark modes and the Dark Reader extension leave the design alone.
+  Navigation is **Roadmap · Playground · Cluster**; a certification's labs,
+  speed drills and mock exams are tabs inside its track (`#/cka`,
+  `#/cka/drills`, `#/cka/exams`). Interface text is Inter;
   anything you could type, the terminal included, is JetBrains Mono Nerd Font
   (the Mono variant, so icons keep to one cell). Both fonts are OFL and served
   locally; their licenses sit next to the files in `lab/web/static/fonts/`.

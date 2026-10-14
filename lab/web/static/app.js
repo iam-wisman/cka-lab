@@ -730,9 +730,6 @@ function renderTop() {
       h("span", { class: "brand-text" }, h("span", { class: "brand-name" }, "Helm", h("b", {}, "Yard")), h("small", {}, "Kubernetes Playgrounds"))),
     h("nav", { class: "nav" },
       h("a", { href: "#/", "data-r": "roadmap" }, "Roadmap"),
-      h("a", { href: "#/cka", "data-r": "cka" }, "CKA labs"),
-      h("a", { href: "#/drills", "data-r": "drills" }, "Drills"),
-      h("a", { href: "#/exams", "data-r": "exams" }, "Exams"),
       h("a", { href: "#/playground", "data-r": "playground" }, "Playground"),
       h("a", { href: "#/cluster", "data-r": "cluster" }, "Cluster")),
     h("span", { class: "spacer" }),
@@ -853,19 +850,22 @@ async function route() {
   const main = $("#main");
   if (!main) return;
   try {
+    // Everything that belongs to a certification lives under the roadmap.
     if (!parts.length || parts[0] === "kubestronaut") { markNav("roadmap"); await viewRoadmap(main); }
-    else if (parts[0] === "cka" || parts[0] === "labs") { markNav("cka"); await viewOverview(main); }
-    else if (parts[0] === "exams") { markNav("exams"); await viewOverview(main, "exams"); }
-    else if (parts[0] === "lab") { markNav("cka"); await viewLab(main, parts[1], parts[2]); }
-    else if (parts[0] === "exam") { markNav("exams"); await viewExam(main, parts[1], parts[2]); }
+    else if (parts[0] === "cka" && parts[1] === "drills") { markNav("roadmap"); await viewDrills(main); }
+    else if (parts[0] === "cka" && parts[1] === "exams") { markNav("roadmap"); await viewExams(main); }
+    else if (parts[0] === "cka" || parts[0] === "labs") { markNav("roadmap"); await viewOverview(main); }
+    else if (parts[0] === "drills") { location.replace("#/cka/drills"); }
+    else if (parts[0] === "exams") { location.replace("#/cka/exams"); }
+    else if (parts[0] === "lab") { markNav("roadmap"); await viewLab(main, parts[1], parts[2]); }
+    else if (parts[0] === "exam") { markNav("roadmap"); await viewExam(main, parts[1], parts[2]); }
+    else if (parts[0] === "drill") { markNav("roadmap"); await viewDrill(main, parts[1]); }
     else if (parts[0] === "cluster") { markNav("cluster"); await viewCluster(main); }
     else if (parts[0] === "playground") { markNav("playground"); await viewPlayground(main); }
-    else if (parts[0] === "track" && parts[1] === "cka") { location.hash = "#/cka"; }
+    else if (parts[0] === "track" && parts[1] === "cka") { location.replace("#/cka"); }
     else if (parts[0] === "track") { markNav("roadmap"); await viewTrack(main, parts[1]); }
     else if (parts[0] === "quiz" && parts[1] === "s") { markNav("roadmap"); await viewSitting(main, parts[2], parts[3]); }
     else if (parts[0] === "quiz") { markNav("roadmap"); await viewQuizTrack(main, parts[1]); }
-    else if (parts[0] === "drills") { markNav("drills"); await viewDrills(main); }
-    else if (parts[0] === "drill") { markNav("drills"); await viewDrill(main, parts[1]); }
     else location.hash = "#/";
   } catch (e) {
     if (e.status === 401) return;
@@ -909,7 +909,7 @@ function labCard(l, next) {
         live ? (live === "failed" ? "Open" : "Continue") : { passed: "Review", graded: "Continue", started: "Continue", built: "Start lab", new: "Start lab" }[state])));
 }
 
-async function viewOverview(main, focus) {
+async function viewOverview(main) {
   const data = await loadOverview();
   const labs = data.labs;
   const passed = labs.filter(labPassed).length;
@@ -941,47 +941,9 @@ async function viewOverview(main, focus) {
   };
   drawCards();
 
-  const examsSection = h("section", { id: "exams" },
-    h("div", { class: "section-head" }, h("h2", {}, icon("exam"), "Mock exams"),
-      h("span", { class: "sub" }, "120 minutes · weighted tasks · pass mark 66 %")),
-    h("div", { class: "lab-grid" }, data.exams.map(e => {
-      const running = e.deadline && !e.submitted_at && e.deadline * 1000 > Date.now();
-      const ea = actFor("exam", e.n);
-      const best = e.history.length ? Math.max(...e.history.map(x => x.score)) : null;
-      return h("article", { class: "lab-card exam-card hud" + (best != null && best >= 66 ? " passed" : "") },
-        h("header", {}, icon("exam"), h("span", {}, "Mock exam ", h("b", {}, e.n)), h("span", { class: "grow" }),
-          h("span", { class: "min" }, icon("clock"), `${e.minutes} min`)),
-        h("div", { class: "body" },
-          h("h3", {}, h("a", { href: `#/exam/${e.n}` }, e.title.replace(/^CKA m/, "M").replace(/^CKA /, ""))),
-          h("p", { class: "cur" }, `${e.tasks} tasks across all five exam domains, timed and weighted like the real exam.`),
-          h("div", { class: "tags" },
-            ea && ea.phase === "preparing" ? h("span", { class: "state-badge preparing" }, "Preparing") : ea && ea.phase === "failed" ? h("span", { class: "state-badge failed" }, "Setup failed") : null,
-            running ? h("span", { class: "tag mark" }, "in progress") : null,
-            e.history.length ? e.history.slice(-5).map(x => h("span", { class: "tag " + (x.passed ? "pass" : "fail") }, `${x.score}%`))
-              : !running && h("span", { class: "tag" }, "not attempted"))),
-        h("footer", {},
-          h("div", { class: "prog" }, h("span", { class: "label-sm" }, "Best score"),
-            h("span", { class: "val" }, best == null ? "—" : `${best} %`),
-            h("span", { class: "bar" }, h("i", { style: { width: `${best || 0}%` } }), h("b", { class: "mark", title: "pass mark" }))),
-          h("a", { class: "btn" + (running ? " solid" : ""), href: `#/exam/${e.n}` }, running ? "Resume" : e.history.length ? "Retake" : "Start exam")));
-    })));
-
-  const term = h("div", { class: "term-card" },
-    h("div", { class: "term-card-bar" }, h("i"), h("i"), h("i"), h("span", {}, "student@jump")),
-    h("div", { class: "term-card-body", id: "vm-strip" }, h("div", {}, h("span", { class: "p" }, "$ "), "lab status")));
-
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("section", { class: "hero" },
-      h("div", { class: "hero-text" },
-        h("div", { class: "kicker" }, "Step 1 of 5 · Certified Kubernetes Administrator · v1.35"),
-        h("h1", {}, "Hands-on practice for the CKA exam"),
-        h("p", { class: "lead" }, "HelmYard is a set of ", h("b", {}, "31 labs"), " and ", h("b", {}, "two timed mock exams"),
-          " that follow the CKA curriculum. You work on a seven-VM cluster that you build yourself, and every task is graded check by check. As in the exam, there are no hints."),
-        h("div", { class: "hero-cta" },
-          next ? h("a", { class: "btn cta lg", href: `#/lab/${next.id}` }, next.started_at || actFor("lab", next.id) ? `Resume lab ${next.num}` : `Start lab ${next.num}`, icon("arrow"))
-            : h("a", { class: "btn cta lg", href: "#/exams" }, "Take a mock exam", icon("arrow")),
-          h("a", { class: "btn lg", href: "#/exams" }, "Mock exams"))),
-      term),
+    trackHead("labs", next ? h("a", { class: "btn cta", href: `#/lab/${next.id}` }, next.started_at || actFor("lab", next.id) ? `Resume lab ${next.num}` : `Start lab ${next.num}`, icon("arrow"))
+      : h("a", { class: "btn cta", href: "#/cka/exams" }, "Take a mock exam", icon("arrow"))),
     h("div", { class: "section-head" }, h("h2", {}, icon("chart"), "Your progress")),
     h("section", { class: "progress" },
       h("div", { class: "readiness hud" },
@@ -1006,7 +968,7 @@ async function viewOverview(main, focus) {
           h("a", { class: "btn quiet", href: "#labs", onclick: e => { e.preventDefault(); $("#labs").scrollIntoView({ behavior: "smooth" }); } }, "All labs")))
         : h("div", { class: "upnext hud" },
           h("div", { class: "card-head" }, h("div", {}, h("h3", {}, "All labs passed"), h("p", {}, "Time for a timed mock exam"))),
-          h("div", { class: "upnext-actions" }, h("a", { class: "btn solid", href: "#/exams" }, "Mock exams", icon("arrow")))),
+          h("div", { class: "upnext-actions" }, h("a", { class: "btn solid", href: "#/cka/exams" }, "Mock exams", icon("arrow")))),
       h("div", { class: "kpi hud" },
         h("div", { class: "kpi-head" }, h("span", { class: "kpi-ico" }, icon("lab")), "Labs passed"),
         h("div", { class: "kpi-num" }, passed, h("small", {}, ` of ${labs.length}`)),
@@ -1032,16 +994,64 @@ async function viewOverview(main, focus) {
     h("section", { id: "labs" },
       h("div", { class: "section-head" }, h("h2", {}, icon("lab"), "Labs"), h("span", { class: "sub" }, `${passed} of ${labs.length} passed`)),
       h("div", { class: "filterbar hud" }, h("label", { class: "search" }, icon("search"), search), h("span", { class: "fl" }, icon("filter")), filters),
-      grid),
-    examsSection)));
+      grid))));
   renderClusterBits();
-  if (focus === "exams") examsSection.scrollIntoView();
   let sig = JSON.stringify(act());
   const off = State.on(st => {
     const now = JSON.stringify(st.activity);
     if (now !== sig) { const was = sig; sig = now; if (JSON.parse(was || "null")?.phase === "preparing") loadOverview().then(drawCards).catch(drawCards); else drawCards(); }
     else if (st.activity?.phase === "preparing") drawCards();   // progress line
   });
+  S.view = () => off();
+}
+
+// The CKA mock exams as cards (the Mock exams tab).
+function examsGrid(data) {
+  return h("section", { id: "exams" },
+    h("div", { class: "section-head" }, h("h2", {}, icon("exam"), "Mock exams"),
+      h("span", { class: "sub" }, "120 minutes · weighted tasks · pass mark 66 %")),
+    h("div", { class: "lab-grid" }, data.exams.map(e => {
+      const running = e.deadline && !e.submitted_at && e.deadline * 1000 > Date.now();
+      const ea = actFor("exam", e.n);
+      const best = e.history.length ? Math.max(...e.history.map(x => x.score)) : null;
+      return h("article", { class: "lab-card exam-card hud" + (best != null && best >= 66 ? " passed" : "") },
+        h("header", {}, icon("exam"), h("span", {}, "Mock exam ", h("b", {}, e.n)), h("span", { class: "grow" }),
+          h("span", { class: "min" }, icon("clock"), `${e.minutes} min`)),
+        h("div", { class: "body" },
+          h("h3", {}, h("a", { href: `#/exam/${e.n}` }, e.title.replace(/^CKA m/, "M").replace(/^CKA /, ""))),
+          h("p", { class: "cur" }, `${e.tasks} tasks across all five exam domains, timed and weighted like the real exam.`),
+          h("div", { class: "tags" },
+            ea && ea.phase === "preparing" ? h("span", { class: "state-badge preparing" }, "Preparing") : ea && ea.phase === "failed" ? h("span", { class: "state-badge failed" }, "Setup failed") : null,
+            running ? h("span", { class: "tag mark" }, "in progress") : null,
+            e.history.length ? e.history.slice(-5).map(x => h("span", { class: "tag " + (x.passed ? "pass" : "fail") }, `${x.score}%`))
+              : !running && h("span", { class: "tag" }, "not attempted"))),
+        h("footer", {},
+          h("div", { class: "prog" }, h("span", { class: "label-sm" }, "Best score"),
+            h("span", { class: "val" }, best == null ? "—" : `${best} %`),
+            h("span", { class: "bar" }, h("i", { style: { width: `${best || 0}%` } }), h("b", { class: "mark", title: "pass mark" }))),
+          h("a", { class: "btn" + (running ? " solid" : ""), href: `#/exam/${e.n}` }, running ? "Resume" : e.history.length ? "Retake" : "Start exam")));
+    })));
+}
+
+// The header of a track's pages: where it sits on the roadmap, and its tabs.
+function trackHead(active, action) {
+  const labs = S.overview?.labs?.length, exams = S.overview?.exams?.length;
+  return h("section", { class: "track-head hud" },
+    h("div", { class: "track-head-main" },
+      h("span", { class: "badge lg" }, "CKA"),
+      h("div", { class: "grow" },
+        h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Roadmap"), h("span", {}, "/"), h("span", {}, "Step 1 of 5"), h("span", {}, "·"), h("span", {}, "curriculum v1.35")),
+        h("h1", {}, "Certified Kubernetes Administrator"),
+        h("p", {}, `${labs || 31} labs, speed drills and ${exams || 2} timed mock exams, on a seven-VM cluster you build yourself. Graded check by check, with no hints.`)),
+      action || null),
+    h("nav", { class: "track-tabs" }, [["labs", "Labs", "#/cka"], ["drills", "Speed drills", "#/cka/drills"], ["exams", "Mock exams", "#/cka/exams"]]
+      .map(([k, label, href]) => h("a", { href, class: k === active ? "on" : "" }, label))));
+}
+
+async function viewExams(main) {
+  const data = await loadOverview();
+  main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" }, trackHead("exams"), examsGrid(data))));
+  const off = State.on((st, prev) => { if (JSON.stringify(st.activity) !== JSON.stringify(prev?.activity)) route(); });
   S.view = () => off();
 }
 
@@ -1369,7 +1379,7 @@ async function viewExam(main, n, mode) {
 
   doc.append(
     h("div", { class: "doc-head" },
-      h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
+      h("div", { class: "eyebrow" }, h("a", { href: "#/cka/exams" }, "← mock exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
       h("div", { style: { display: "flex", alignItems: "center", gap: "14px", marginTop: "10px" } }, clockEl, h("span", { style: { flex: 1 } }),
         review ? h("a", { class: "btn", href: `#/exam/${n}` }, "Results")
           : h("button", { class: "btn solid", onclick: () => submit(false) }, "Hand in")),
@@ -1427,7 +1437,7 @@ function viewExamBriefing(main, exam) {
     phase = now; busy();
   });
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
+    h("div", { class: "eyebrow" }, h("a", { href: "#/cka/exams" }, "← mock exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
     h("h1", { class: "page-title" }, exam.title.replace(/^CKA m/, "M").replace(/^CKA /, "")),
     h("div", { class: "briefing" },
       h("div", { class: "hud" }, renderMarkdown(exam.readme)),
@@ -1471,7 +1481,7 @@ async function viewExamResults(main, exam) {
   const drawer = jobDrawer({ filter: j => j.target === String(n), onEnd: () => route() });
   const busy = () => !!S.jobs.current;
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "eyebrow" }, h("a", { href: "#/exams" }, "← exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
+    h("div", { class: "eyebrow" }, h("a", { href: "#/cka/exams" }, "← mock exams"), h("span", {}, "/"), h("span", { class: "id" }, `mock exam ${n}`)),
     h("section", { class: "masthead hud", style: { marginTop: "14px" } },
       h("div", {}, h("h1", {}, r ? (r.passed ? "Passed." : "Not this time.") : "Graded."),
         h("p", {}, r ? `Pass mark ${r.pass_mark}%. Graded ${ago(r.at)}. Click a task to see which checks failed.` : "")),
@@ -1661,6 +1671,7 @@ const domainVar = key => { const i = DOMAINS.indexOf(domainOf(key)); return i < 
 
 async function viewDrills(main) {
   let { drills } = await api("/drills");
+  if (!S.overview) await loadOverview().catch(() => {});
   const runs = drills.reduce((a, d) => a + d.attempts, 0);
   const inside = drills.filter(d => d.best != null && d.best <= d.seconds).length;
   const card = d => {
@@ -1683,7 +1694,8 @@ async function viewDrills(main) {
   };
   const grid = h("div", { class: "lab-grid" }, drills.map(card));
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "wrap" },
-    h("div", { class: "section-head", style: { marginTop: 0 } }, h("h2", {}, icon("clock"), "Speed drills"),
+    trackHead("drills"),
+    h("div", { class: "section-head" }, h("h2", {}, icon("clock"), "Speed drills"),
       h("span", { class: "sub" }, `${inside} of ${drills.length} inside the budget · ${runs} run${runs === 1 ? "" : "s"}`)),
     h("div", { class: "callout" }, h("b", {}, "One task, a tight clock. "),
       "Budgets are shorter than the real exam allows. Every start draws new names and numbers, so you can't memorise answers. The clock runs until every check passes."),
@@ -1764,7 +1776,7 @@ async function viewDrill(main, id) {
   };
   doc.append(
     h("div", { class: "doc-head" },
-      h("div", { class: "eyebrow" }, h("a", { href: "#/drills" }, "← drills"), h("span", {}, "/"), h("span", { class: "id" }, `drill ${d.num}`), h("span", {}, "·"), h("span", {}, shortDomain(d.domain))),
+      h("div", { class: "eyebrow" }, h("a", { href: "#/cka/drills" }, "← speed drills"), h("span", {}, "/"), h("span", { class: "id" }, `drill ${d.num}`), h("span", {}, "·"), h("span", {}, shortDomain(d.domain))),
       h("h1", {}, d.title),
       h("div", { style: { display: "flex", alignItems: "center", gap: "14px", marginTop: "10px" } }, clockEl, h("span", { style: { flex: 1 } }), actions)),
     body, drawer);
@@ -1831,7 +1843,7 @@ function workingTile() {
         h("div", { class: "now-actions" }, h("a", { class: "btn sm cta", href: actHref(a) }, a.phase === "preparing" ? "Watch it" : "Continue", icon("arrow")))]
       : [h("div", { class: "now-big" }, "Nothing yet"),
         h("p", { class: "muted" }, "Pick up the next lab on your roadmap, run a speed drill, or open the playground to try commands on a working cluster."),
-        h("div", { class: "now-actions" }, h("a", { class: "btn sm", href: "#/playground" }, "Playground"), h("a", { class: "btn sm quiet", href: "#/drills" }, "Drills"))]);
+        h("div", { class: "now-actions" }, h("a", { class: "btn sm", href: "#/playground" }, "Playground"), h("a", { class: "btn sm quiet", href: "#/cka/drills" }, "Drills"))]);
 }
 
 async function powerOffNodes() {
@@ -1892,7 +1904,7 @@ async function viewRoadmap(main) {
         h("p", { class: "lead" }, "Start with the CKA and build a highly available cluster from bare Ubuntu. Then secure it for the CKS, ship applications on it for the CKAD, and finish with the KCNA and KCSA. Each track follows its official curriculum, with no hints and tighter clocks than the real exam."),
         h("div", { class: "hero-cta" }, cta(), h("a", { class: "btn lg", href: "#/playground" }, "Open the playground"))),
       h("div", { class: "rm-mascot" },
-        h("img", { src: "/static/brand/helmyard-mascot.png", alt: "HelmYard: a ship's wheel around a little server house, in a playground" }),
+        h("div", { class: "disc" }, h("img", { src: "/static/brand/helmyard-mascot.png", alt: "HelmYard: a ship's wheel around a little server house, in a playground" })),
         h("div", { class: "rm-count" }, h("b", {}, done), h("span", {}, "of 5 ready")))),
     nowRow,
     h("div", { class: "section-head" }, h("h2", {}, icon("arrow"), "Your roadmap"), h("span", { class: "sub" }, "CKA → CKS → CKAD → KCNA → KCSA")),
