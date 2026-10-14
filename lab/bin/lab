@@ -542,12 +542,14 @@ jump_restore() {
   done
   cur=$(apt-mark showmanual | sort)
   # Packages that were installed by hand at the snapshot, at the version they had then.
+  # Kernel and firmware packages move with Ubuntu's own updates; they aren't lab state.
   missing=$(while IFS='=' read -r pkg ver; do
+    [[ $pkg == linux-* || $pkg == firmware-* ]] && continue
     [[ $(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null) == "$ver" ]] || echo "$pkg=$ver"
   done <"$st/.lab-meta/versions")
   [[ -n $missing ]] && sudo apt-get update -qq >/dev/null 2>&1   # slow: only when something must be installed
   if [[ $mode == exact ]]; then
-    extra=$(comm -23 <(echo "$cur") "$st/.lab-meta/manual")
+    extra=$(comm -23 <(echo "$cur") "$st/.lab-meta/manual" | grep -Ev '^(linux|firmware)-')
     if [[ -n $extra ]]; then
       sudo apt-mark unhold $extra >/dev/null 2>&1
       sudo DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq $extra >/dev/null 2>&1 && info "jump: removed $(xargs <<<"$extra")"
@@ -687,10 +689,11 @@ cmd_power() {
 # --- live snapshots: the cluster with its memory, back in seconds ----------------------
 #
 # A snapshot with the VMs' RAM (Proxmox vmstate) rolls back to *running* VMs: no boot,
-# no kubelet start, no cold etcd election. All node VMs are handled at once. They are
-# saved while running, one after another within seconds; etcd copes, as with a member
-# that lagged (the most up-to-date log wins the election). Each costs about the nodes'
-# RAM (~25 GB) on the VM storage.
+# no kubelet start, no cold etcd election. All node VMs are paused first, so the whole
+# cluster is frozen at one instant and nothing writes while the memory is saved. (Saving
+# from running VMs stalled their disks for minutes and once left containerd's database
+# on a control plane corrupt.) The cluster then continues from the snapshot itself, so
+# saving is checked by a restore. Each costs the RAM in use on the VM storage.
 
 parallel_task() { # parallel_task <method> <path suffix> [curl args]: on every node VM, wait for all
   local method=$1 suffix=$2 vm upid upids=(); shift 2
@@ -701,18 +704,32 @@ parallel_task() { # parallel_task <method> <path suffix> [curl args]: on every n
 }
 
 snapshot_live() { # snapshot_live <name> <description>
+  # Most of the nodes' RAM is file cache. Drop it first: the balloon driver reports the
+  # freed pages to the host, which discards them, and QEMU saves zero pages as a flag.
+  local n pids=() ok=0
+  for n in "${K8S_NODES[@]}" nfs; do
+    on "$n" sh -c 'sync; echo 3 >/proc/sys/vm/drop_caches; echo 1 >/proc/sys/vm/compact_memory' & pids+=($!)
+  done
+  wait "${pids[@]}"; sleep 5    # free page reporting runs every couple of seconds
   parallel_task DELETE "/snapshot/$1"
+  parallel_task POST /status/suspend                    # freeze the cluster at one instant
   parallel_task POST /snapshot -d snapname="$1" -d vmstate=1 -d description="$2 $(date -u +%FT%TZ)"
-  [[ $(node_vm_snapshots | grep -cx "$1") == 1 ]]
+  [[ $(node_vm_snapshots | grep -cx "$1") == 1 ]] && ok=1
+  # Saving a paused VM's memory leaves QEMU in "finish-migrate", which a plain resume can't
+  # leave. Come back the way every later spin-up does: from the snapshot just taken.
+  rollback_live "$1" || return 1
+  (( ok ))
 }
 
 rollback_live() { # rollback_live <name>: stop, roll back (RAM included: they come back running)
   parallel_task POST /status/stop
   parallel_task POST "/snapshot/$1/rollback" -d start=1
+  parallel_task POST /status/resume     # saved while paused: make sure they run
   # The guests' clocks are where the snapshot left them: set them from the jump host.
-  local n
+  local n pids=()
   for n in "${K8S_NODES[@]}" nfs; do wait_for 60 node_up "$n" || return 1; done
-  for n in "${K8S_NODES[@]}" nfs; do on "$n" date -s "@$(date +%s.%N)" >/dev/null & done; wait
+  for n in "${K8S_NODES[@]}" nfs; do on "$n" date -s "@$(date +%s.%N)" >/dev/null & pids+=($!); done
+  wait "${pids[@]}"   # only these: the caller may have its own background jobs
   rm -f "$GRADER_KUBECONFIG"
 }
 
@@ -746,17 +763,31 @@ cmd_playground() {
   case $preset in
     core) want=$PLAYGROUND_CORE ;;
     full) want=$PLAYGROUND_FULL ;;
-    *) die "usage: lab playground [core|full] [--rebuild]" ;;
+    *) die "usage: lab playground [core|full] [--rebuild|--save]" ;;
   esac
   snap=pg-$preset
   key=$(labs_key $(closure $want))
   mkdir -p "$LAB_STATE/provisioned"
+  if [[ ${2:-} == --save ]]; then
+    # Save the cluster as it is now as this preset (e.g. after restoring it and changing nothing).
+    info "Saving the current cluster as the live snapshot $snap"
+    snapshot_live "$snap" "lab playground $preset: labs $(closure $want | sort -n | xargs)" && jump_save "$snap" "$key" \
+      || die "saving $snap failed"
+    info "Saved in $(( (SECONDS - t0) / 60 ))m$(( (SECONDS - t0) % 60 ))s"
+    return 0
+  fi
   if [[ ${2:-} != --rebuild ]] && live_cached "$snap" "$key"; then
     info "Restoring the $preset playground from its live snapshot $snap"
+    # The jump host's share and the VMs' rollback don't depend on each other: do both at once.
+    local jlog=$LAB_STATE/up/playground-jump.log jpid
+    mkdir -p "$LAB_STATE/up"
+    jump_restore "$snap" add >"$jlog" 2>&1 & jpid=$!
     rollback_live "$snap" || die "the nodes didn't come back after the rollback; check lab power status"
-    jump_restore "$snap" add || die "couldn't restore the jump host's lab state from $snap"
-    info "Checking the cluster"
+    info "Node VMs resumed ($(( SECONDS - t0 ))s)"
+    wait "$jpid" || die "couldn't restore the jump host's lab state from $snap (log: $jlog)"
+    info "Jump host's tools and kubeconfig back ($(( SECONDS - t0 ))s)"
     wait_cluster || die "the cluster isn't Ready after the restore; try again, or lab playground $preset --rebuild"
+    info "Every node Ready, controllers running ($(( SECONDS - t0 ))s)"
     for n in $(closure $want); do date -u +%FT%TZ >"$LAB_STATE/provisioned/$(basename "$(lab_dir "$n")")"; done
     date +%s >"$LAB_STATE/last-reset"
   else
